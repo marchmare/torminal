@@ -9,6 +9,7 @@ authors = [
 requires-python = ">=3.11"
 dependencies = [
     "gtfs-realtime-bindings>=2.1.0",
+    "requests>=2.34.2",
     "textual>=8.2.8",
 ]
 
