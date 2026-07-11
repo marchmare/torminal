@@ -185,6 +185,7 @@ class Trip(Model):
     id: str
     route_id: str
     shape_id: str
+    service_id: str
     headsign: str
     direction: Direction
     is_wheelchair_accessible: bool
@@ -196,6 +197,7 @@ class Trip(Model):
             id=row["trip_id"],
             route_id=row["route_id"],
             shape_id=row["shape_id"],
+            service_id=row["service_id"],
             headsign=row["trip_headsign"],
             direction=Direction(int(row["direction_id"])),
             is_wheelchair_accessible=bool(int(row["wheelchair_accessible"])),
@@ -308,6 +310,43 @@ class StopTime(Model):
             stop_id=row["stop_id"],
             pickup_type=DropoffPickupType(int(row["pickup_type"])),
             drop_off_type=DropoffPickupType(int(row["drop_off_type"])),
+        )
+
+
+@dataclass
+class ServiceCalendar(Model):
+    """
+    Service calendar data parsed from calendar.txt.
+    Defines service calendars and the dates on which trips operate.
+    """
+
+    _gtfs_file = "calendar.txt"
+    _key = "service_id"
+
+    id: str
+    monday: bool
+    tuesday: bool
+    wednesday: bool
+    thursday: bool
+    friday: bool
+    saturday: bool
+    sunday: bool
+    start_date: str
+    end_date: str
+
+    @classmethod
+    def from_dict(cls, row: dict[str, str]) -> Self:
+        return cls(
+            id=row["service_id"],
+            monday=bool(int(row["monday"])),
+            tuesday=bool(int(row["tuesday"])),
+            wednesday=bool(int(row["wednesday"])),
+            thursday=bool(int(row["thursday"])),
+            friday=bool(int(row["friday"])),
+            saturday=bool(int(row["saturday"])),
+            sunday=bool(int(row["sunday"])),
+            start_date=row["start_date"],
+            end_date=row["end_date"],
         )
 
 

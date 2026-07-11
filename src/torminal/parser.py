@@ -3,7 +3,7 @@ import csv
 from zipfile import ZipFile
 from io import StringIO, TextIOWrapper
 from typing import TypeVar, TypedDict
-from .data import Vehicle, Stop, FeedInfo, Trip, Route, Shape, TripStops, GroupModel, Model
+from .data import Vehicle, Stop, FeedInfo, Trip, Route, Shape, ServiceCalendar, TripStops, GroupModel, Model
 
 VEHICLE_DICTIONARY_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile/?file=vehicle_dictionary.csv"
 GTFS_FILE_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
@@ -105,6 +105,7 @@ class GTFSLookup(TypedDict):
     routes: dict[str, Route]
     stops: dict[str, Stop]
     shapes: dict[str, Shape]
+    service_calendars: dict[str, ServiceCalendar]
     feed_info: FeedInfo
 
 
@@ -120,6 +121,7 @@ def load_lookup() -> GTFSLookup:
             "routes": parse_txt_as_dict(Route, z),
             "stops": parse_txt_as_dict(Stop, z),
             "shapes": parse_txt_as_dict_grouped(Shape, z),
+            "service_calendars": parse_txt_as_dict(ServiceCalendar, z),
             "feed_info": parse_feed_info(z),
         }
 
@@ -138,4 +140,5 @@ def print_summary(lookup: GTFSLookup) -> None:
         f"\t ⬩ trip shapes definitions: {len(lookup['shapes'])} -> "
         f"{sum(len(p.items) for p in lookup['shapes'].values())} points"
     )
+    print(f"\t ⬩ service calendars: {len(lookup['service_calendars'])}")
     print(lookup["feed_info"])
