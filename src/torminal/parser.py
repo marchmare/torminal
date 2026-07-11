@@ -142,3 +142,4 @@ def print_summary(lookup: GTFSLookup) -> None:
     )
     print(f"\t ⬩ service calendars: {len(lookup['service_calendars'])}")
     print(lookup["feed_info"])
+    print("")
