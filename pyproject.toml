@@ -19,3 +19,6 @@ torminal = "torminal.cli:main"
 [build-system]
 requires = ["uv_build>=0.11.28,<0.12.0"]
 build-backend = "uv_build"
+
+[tool.mypy]
+ignore_missing_imports = true
