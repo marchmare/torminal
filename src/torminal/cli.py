@@ -1,5 +1,5 @@
 from .gtfs import load_lookup, print_summary
-from .query import Query
+from .query import Monitor, Query
 
 
 def main() -> None:
@@ -9,17 +9,9 @@ def main() -> None:
     lookup = load_lookup()
     print_summary(lookup)
 
-    # user input
-    # uinput = input("Specify a stop and line to monitor (syntax: <stop>:<line number>:<destination>): ")
-    uinput = "NARA71:10"
-    stop, line = uinput.split(":")
-    query = Query(stop, line, lookup)
-    result = query.poll(time_window=60)
+    query = Query(4008, 10, 60)
+    monitor = Monitor(lookup)
+    result = monitor.poll(query)
     for r in result:
         print("\nDEPARTURE:")
-        for k, v in r.items():
-            if k.startswith("_"):
-                continue
-            print(f"{k}: {v}")
-
-    # print(get_gtfs_rt_data())
+        print(r)

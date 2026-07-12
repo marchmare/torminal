@@ -1,3 +1,5 @@
+"""Python GTFS data models."""
+
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 from typing import Literal, TypeVar, Self, ClassVar, Generic

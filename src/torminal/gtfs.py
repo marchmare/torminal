@@ -7,13 +7,10 @@ from typing import TypeVar, TypedDict
 from csv import DictReader
 from google.transit.gtfs_realtime_pb2 import TripUpdate, FeedEntity
 from google.protobuf.internal.containers import RepeatedCompositeFieldContainer
+from datetime import datetime
 
 from .data import Vehicle, Stop, FeedInfo, Trip, Route, Shape, ServiceCalendar, TripStops, GroupModel, Model
 from .requests import open_gtfs_zip, open_vehicle_dictionary
-
-VEHICLE_DICTIONARY_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile/?file=vehicle_dictionary.csv"
-GTFS_FILE_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
-GTFS_FILE_NAME = "ZTMPoznanGTFS.zip"
 
 M = TypeVar("M", bound=Model)
 G = TypeVar("G", bound=GroupModel)
@@ -137,3 +134,19 @@ def print_summary(lookup: GTFSLookup) -> None:
     ⬩ service calendars: {len(lookup["service_calendars"])}
     {lookup["feed_info"]}
     """)
+
+
+### helpers:
+
+weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+
+
+def resolve_service_calendar(lookup: GTFSLookup) -> ServiceCalendar | None:
+    """Get service calendar object for today's weekday."""
+
+    current_weekday = datetime.today().weekday()
+
+    for service in lookup["service_calendars"].values():
+        if getattr(service, weekday_names[current_weekday]):
+            return service
+    return None
