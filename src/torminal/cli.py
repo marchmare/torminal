@@ -1,7 +1,5 @@
-from google.transit import gtfs_realtime_pb2
-from .parser import load_lookup, print_summary
+from .gtfs_static import load_lookup, print_summary
 from .query import Query
-from datetime import timedelta, datetime, date
 
 
 def main() -> None:
@@ -16,4 +14,12 @@ def main() -> None:
     uinput = "NARA71:10"
     stop, line = uinput.split(":")
     query = Query(stop, line, lookup)
-    query.poll(minutes=60)
+    result = query.poll(time_window=60)
+    for r in result:
+        print("\nDEPARTURE:")
+        for k, v in r.items():
+            if k.startswith("_"):
+                continue
+            print(f"{k}: {v}")
+
+    # print(get_gtfs_rt_data())
