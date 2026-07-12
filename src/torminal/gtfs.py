@@ -1,54 +1,38 @@
-import requests
+"""GTFS parsers to TORminal data models and dictionaries."""
+
 import csv
 from zipfile import ZipFile
-from io import StringIO, TextIOWrapper
+from io import TextIOWrapper
 from typing import TypeVar, TypedDict
+from csv import DictReader
+from google.transit.gtfs_realtime_pb2 import TripUpdate, FeedEntity
+from google.protobuf.internal.containers import RepeatedCompositeFieldContainer
+
 from .data import Vehicle, Stop, FeedInfo, Trip, Route, Shape, ServiceCalendar, TripStops, GroupModel, Model
+from .requests import open_gtfs_zip, open_vehicle_dictionary
 
 VEHICLE_DICTIONARY_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile/?file=vehicle_dictionary.csv"
 GTFS_FILE_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
 GTFS_FILE_NAME = "ZTMPoznanGTFS.zip"
 
-
-def parse_vehicle_dictionary() -> dict[str, Vehicle]:
-    """
-    Request and parse vehicle_dictionary.csv to Vehicle objects. Returns dictionary of vehicle ID: Vehicle.
-    This file stores info about specific vehicle type and features.
-
-        Documentation: https://www.ztm.poznan.pl/wp-content/uploads/2024/07/slownik-pojazdow-opis.pdf
-    """
-    print("\t ⬩ downloading and parsing vehicle_dictionary.csv")
-    with requests.get(VEHICLE_DICTIONARY_URL) as response:
-        response.raise_for_status()
-        reader = csv.DictReader(StringIO(response.text))
-
-    return {row["vehicle"]: Vehicle.from_dict(row) for row in reader}
-
-
-def get_gtfs_zip() -> None:
-    """
-    Download GTFS zip archive with trips, stop times, stops, shapes, routes, feed_info, calendar dates, calendar and agency data.
-
-        Documentation: https://www.ztm.poznan.pl/wp-content/uploads/2024/07/Specyfikacja-GTFS-04.02.2022.pdf
-    """
-    url = GTFS_FILE_URL
-
-    headers = {
-        "Accept": "application/octet-stream",
-        "Content-Type": "application/x-www-form-urlencoded",
-    }
-
-    print(f"\t ⬩ downloading {GTFS_FILE_NAME}")
-    with requests.get(url, headers=headers, stream=True) as response:
-        response.raise_for_status()
-
-        with open(GTFS_FILE_NAME, "wb") as f:
-            for chunk in response.iter_content(chunk_size=8192):
-                f.write(chunk)
-
-
 M = TypeVar("M", bound=Model)
 G = TypeVar("G", bound=GroupModel)
+
+
+### GTFS realtime data:
+
+
+def parse_gtfs_rt_data(feed: RepeatedCompositeFieldContainer[FeedEntity]) -> dict[str, dict[str, TripUpdate]]:
+    """
+    Returns dictionary of trip ID: gtfs_realtime_pb2.TripUpdate.
+
+        Documentation: https://gtfs.org/documentation/realtime/reference/#message-tripupdate
+    """
+
+    return {e.trip_update.trip.trip_id: e.trip_update for e in feed}
+
+
+### GTFS static data:
 
 
 def parse_txt_as_dict(model: type[M], z: ZipFile) -> dict[str, M]:
@@ -85,6 +69,17 @@ def parse_txt_as_dict_grouped(model: type[G], z: ZipFile) -> dict[str, G]:
     return _dict
 
 
+def parse_vehicle_dictionary(vehicle_dictionary_reader: DictReader) -> dict[str, Vehicle]:
+    """
+    Returns dictionary of vehicle ID: Vehicle.
+    This file stores info about specific vehicle type and features.
+
+         Documentation: https://www.ztm.poznan.pl/wp-content/uploads/2024/07/slownik-pojazdow-opis.pdf
+    """
+
+    return {row["vehicle"]: Vehicle.from_dict(row) for row in vehicle_dictionary_reader}
+
+
 def parse_feed_info(z: ZipFile) -> FeedInfo:
     """
     Parse feed_info.txt.
@@ -111,11 +106,13 @@ class GTFSLookup(TypedDict):
 
 def load_lookup() -> GTFSLookup:
     print("Loading GTFS data...")
-    get_gtfs_zip()
 
-    with ZipFile(GTFS_FILE_NAME) as z:
+    with open_vehicle_dictionary() as vd:
+        vehicle_dictionary = parse_vehicle_dictionary(vd)
+
+    with open_gtfs_zip() as z:
         return {
-            "vehicles": parse_vehicle_dictionary(),
+            "vehicles": vehicle_dictionary,
             "trips": parse_txt_as_dict(Trip, z),
             "trip_stops": parse_txt_as_dict_grouped(TripStops, z),
             "routes": parse_txt_as_dict(Route, z),
@@ -127,19 +124,16 @@ def load_lookup() -> GTFSLookup:
 
 
 def print_summary(lookup: GTFSLookup) -> None:
-    print("Loaded data summary:")
-    print(f"\t ⬩ vehicles: {len(lookup['vehicles'])}")
-    print(f"\t ⬩ trips: {len(lookup['trips'])}")
-    print(
-        f"\t ⬩ trip stops: {len(lookup['trip_stops'])} -> "
-        f"{sum(len(ts.items) for ts in lookup['trip_stops'].values())} events"
-    )
-    print(f"\t ⬩ stops definitions: {len(lookup['stops'])}")
-    print(f"\t ⬩ trip routes definitions: {len(lookup['routes'])}")
-    print(
-        f"\t ⬩ trip shapes definitions: {len(lookup['shapes'])} -> "
-        f"{sum(len(p.items) for p in lookup['shapes'].values())} points"
-    )
-    print(f"\t ⬩ service calendars: {len(lookup['service_calendars'])}")
-    print(lookup["feed_info"])
-    print("")
+    trip_stop_events = sum(len(ts.items) for ts in lookup["trip_stops"].values())
+    shape_points = sum(len(shape.items) for shape in lookup["shapes"].values())
+
+    print(f"""Loaded data summary:
+    ⬩ vehicles: {len(lookup["vehicles"])}
+    ⬩ trips: {len(lookup["trips"])}
+    ⬩ trip stops: {len(lookup["trip_stops"])} -> {trip_stop_events} events
+    ⬩ stops definitions: {len(lookup["stops"])}
+    ⬩ trip routes definitions: {len(lookup["routes"])}
+    ⬩ trip shapes definitions: {len(lookup["shapes"])} -> {shape_points} points
+    ⬩ service calendars: {len(lookup["service_calendars"])}
+    {lookup["feed_info"]}
+    """)

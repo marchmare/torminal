@@ -1,4 +1,4 @@
-from .gtfs_static import load_lookup, print_summary
+from .gtfs import load_lookup, print_summary
 from .query import Query
 
 

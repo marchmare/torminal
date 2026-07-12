@@ -24,7 +24,7 @@ class GroupModel(Model, Generic[I]):
     items: list[I]
 
 
-### GTFS-Realtime related data -------------------------
+### GTFS realtime data:
 
 
 class FloorType(IntEnum):
@@ -73,7 +73,7 @@ class Vehicle:
         )
 
 
-### Static GTFS related data -------------------------
+### GTFS static data:
 """
                         ┌──────────────────┐                                                
                         │= trips.txt ======│                                                

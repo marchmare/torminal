@@ -1,36 +1,17 @@
 from torminal.data import ServiceCalendar
-from google.transit import gtfs_realtime_pb2
 from google.transit.gtfs_realtime_pb2 import TripUpdate
-from .gtfs_static import GTFSLookup
+from .gtfs import GTFSLookup, parse_gtfs_rt_data
+from .requests import fetch_gtfs_rt_feed
 from .data import Stop, ServiceCalendar
 from datetime import timedelta, datetime, date
-import requests
 
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
-
-GTFS_RT_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file="
-
-
-def get_gtfs_rt_data() -> dict[str, dict]:
-    feeds_url = GTFS_RT_URL + "feeds.pb"  # aggregated data, not need
-    trip_updates_url = GTFS_RT_URL + "trip_updates.pb"
-    vehicle_positions_url = GTFS_RT_URL + "vehicle_positions.pb"  # not needed
-
-    feed = gtfs_realtime_pb2.FeedMessage()
-    response = requests.get(trip_updates_url)
-    response.raise_for_status()
-
-    feed.ParseFromString(response.content)
-
-    return {e.trip_update.trip.trip_id: e.trip_update for e in feed.entity}
 
 
 class Query:
     """Class representing a single stop-line query added by user to monitor departures."""
 
     def __init__(self, stop_code: str, route_id: str, lookup: GTFSLookup) -> None:
-        feed = gtfs_realtime_pb2.FeedMessage()
-
         self._lookup = lookup
         self.stop = self.resolve_stop(stop_code)
         self.route = self._lookup["routes"].get(route_id, None)
@@ -44,6 +25,7 @@ class Query:
         for stop in self._lookup["stops"].values():
             if stop.code == stop_code:
                 return stop
+        return None
 
     def resolve_service_calendar(self) -> ServiceCalendar | None:
         """Get service calendar object for today's weekday."""
@@ -53,6 +35,7 @@ class Query:
         for service in self._lookup["service_calendars"].values():
             if getattr(service, weekday_names[current_weekday]):
                 return service
+        return None
 
     def check_arrival_within_window(self, arrival_time: str, time_window: int) -> bool:
         """Calculate if arrival time for trip stop event will occur within a time period specified by `minutes` argument, counted from current time."""
@@ -74,7 +57,7 @@ class Query:
         delta = _arrival_time - time_start
         return int(delta.total_seconds() // 60)
 
-    def add_delay(self, arrival_time: str, delay: int) -> int:
+    def add_delay(self, arrival_time: str, delay: int) -> str:
         """Add GTFS-RT delay values (seconds integer) to the arrival time in GTFS static format (%H:%M:%S)."""
 
         _arrival_time = datetime.combine(date.today(), datetime.strptime(arrival_time, "%H:%M:%S").time())
@@ -82,19 +65,26 @@ class Query:
 
     def resolve_closest_stop(
         self, sequence: int, stop_time_updates: list[TripUpdate.StopTimeUpdate]
-    ) -> TripUpdate.StopTimeUpdate | None:
+    ) -> TripUpdate.StopTimeUpdate:
         """Out of Stop Time Update list entries, find the one that is closest to the queried stop sequence."""
 
         previous_stops = (update for update in stop_time_updates if update.stop_sequence < sequence)
         return max(previous_stops, key=lambda update: update.stop_sequence, default=None)
 
-    def poll(self, time_window: int) -> None:
+    def poll(self, time_window: int) -> list[dict]:
         """Find upcoming arrivals for the query, that will occur within specified time window."""
 
         print("Polling...")
-        results = []
+        results: list[dict] = []
+
         service = self.resolve_service_calendar()
-        gtfs_rt_data = get_gtfs_rt_data()
+
+        if not service or not self.route or not self.stop:
+            return results
+
+        gtfs_rt_feed = fetch_gtfs_rt_feed()
+        gtfs_rt_data: dict[str, TripUpdate] = parse_gtfs_rt_data(gtfs_rt_feed)
+
         for trip in self._lookup["trips"].values():
 
             if trip.route_id != self.route.id:
@@ -128,7 +118,7 @@ class Query:
                             "stop_sequence": stop_time.sequence,
                             "current_stop_sequence": stop_time_update.stop_sequence,
                             "trip_id": trip.id,
-                            "vehicle_id": vehicle.id,
+                            "vehicle_id": vehicle.id if vehicle else None,
                             "route_id": self.route.id,
                             "stop_code": self.stop.code,
                             "stop_name": self.stop.name,

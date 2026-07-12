@@ -11,6 +11,7 @@ dependencies = [
     "gtfs-realtime-bindings>=2.1.0",
     "requests>=2.34.2",
     "textual>=8.2.8",
+    "types-protobuf>=7.34.1.20260518",
 ]
 
 [project.scripts]
