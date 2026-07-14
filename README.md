@@ -18,3 +18,14 @@ After installation, run:
 
     torminal
 
+## Devtools
+
+`TORminal`'s TUI is built with [`textual`](https://textual.textualize.io/) library. 
+
+To debug while `TORminal` is running, first open and keep this debug console running:
+
+    textual console
+
+In another console, run `TORminal` with this snippet:
+
+    uv run textual run --dev torminal.cli:app

@@ -1,13 +1,13 @@
 from torminal.gtfs.static import GTFSStaticLoader
 from torminal.query import Monitor, Query
+from torminal.tui.main import WelcomeApp
 
 
-def main() -> None:
+def app() -> None:
     print("🚋 TORminal")
+    # app = WelcomeApp()
+    # app.run()
 
-    # get lookup dictionaries
-    # lookup = load_lookup()
-    # print_summary(lookup)
     loader = GTFSStaticLoader(print_update)
     lookup = loader.load()
     query = Query("NARA71", 10, 60)
