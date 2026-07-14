@@ -5,12 +5,17 @@ from zipfile import ZipFile
 from io import TextIOWrapper
 from typing import TypeVar, TypedDict
 from csv import DictReader
-from google.transit.gtfs_realtime_pb2 import TripUpdate, FeedEntity
+from google.transit.gtfs_realtime_pb2 import TripUpdate, VehiclePosition, FeedEntity
 from google.protobuf.internal.containers import RepeatedCompositeFieldContainer
 from datetime import datetime
-
+from .requests import (
+    open_gtfs_zip,
+    open_vehicle_dictionary,
+    fetch_gtfs_rt_feed,
+    GTFS_RT_TRIP_UPDATES_URL,
+    GTFS_RT_VEHICLE_POSITIONS_URL,
+)
 from .data import Vehicle, Stop, FeedInfo, Trip, Route, Shape, ServiceCalendar, TripStops, GroupModel, Model
-from .requests import open_gtfs_zip, open_vehicle_dictionary
 
 M = TypeVar("M", bound=Model)
 G = TypeVar("G", bound=GroupModel)
@@ -19,7 +24,9 @@ G = TypeVar("G", bound=GroupModel)
 ### GTFS realtime data:
 
 
-def parse_gtfs_rt_data(feed: RepeatedCompositeFieldContainer[FeedEntity]) -> dict[str, dict[str, TripUpdate]]:
+def parse_gtfs_rt_trip_updates(
+    feed: RepeatedCompositeFieldContainer[FeedEntity],
+) -> dict[str, dict[str, TripUpdate]]:
     """
     Returns dictionary of trip ID: gtfs_realtime_pb2.TripUpdate.
 
@@ -27,6 +34,32 @@ def parse_gtfs_rt_data(feed: RepeatedCompositeFieldContainer[FeedEntity]) -> dic
     """
 
     return {e.trip_update.trip.trip_id: e.trip_update for e in feed}
+
+
+def parse_gtfs_rt_vehicle_positions(
+    feed: RepeatedCompositeFieldContainer[FeedEntity],
+) -> dict[str, dict[str, VehiclePosition]]:
+    """
+    Returns dictionary of trip ID: gtfs_realtime_pb2.VehiclePosition.
+
+        Documentation: https://gtfs.org/documentation/realtime/reference/#message-vehicleposition
+    """
+
+    return {e.vehicle.trip.trip_id: e.vehicle for e in feed}
+
+
+class GTFS_RTLookup(TypedDict):
+    trip_updates: dict[str, dict[str, TripUpdate]]
+    vehicle_positions: dict[str, dict[str, VehiclePosition]]
+
+
+def load_rt_lookup() -> GTFS_RTLookup:
+    _gtfs_rt_trip_updates = fetch_gtfs_rt_feed(GTFS_RT_TRIP_UPDATES_URL)
+    _gtfs_rt_vehicle_positions = fetch_gtfs_rt_feed(GTFS_RT_VEHICLE_POSITIONS_URL)
+    return {
+        "trip_updates": parse_gtfs_rt_trip_updates(_gtfs_rt_trip_updates),
+        "vehicle_positions": parse_gtfs_rt_vehicle_positions(_gtfs_rt_vehicle_positions),
+    }
 
 
 ### GTFS static data:

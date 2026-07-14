@@ -1,8 +1,8 @@
-from google.transit.gtfs_realtime_pb2 import TripUpdate
+from google.transit.gtfs_realtime_pb2 import TripUpdate, Position
 from datetime import datetime, timedelta
 from dataclasses import dataclass
-from .gtfs import GTFSLookup, parse_gtfs_rt_data, resolve_service_calendar
-from .requests import fetch_gtfs_rt_feed
+from .gtfs import GTFSLookup, resolve_service_calendar, load_rt_lookup
+
 from .time_utils import check_arrival_within_window, convert_time_to_today, convert_time_to_gtfs
 from .data import StopTime, Stop, Route, Vehicle, Trip
 
@@ -77,6 +77,7 @@ class DepartureResult:
     vehicle: Vehicle | None
     current_stop_sequence: int
     arrival: ArrivalTime
+    position: Position
 
 
 class Monitor:
@@ -99,8 +100,7 @@ class Monitor:
         if not service or not route or not stop:
             return results
 
-        gtfs_rt_feed = fetch_gtfs_rt_feed()
-        gtfs_rt_data: dict[str, TripUpdate] = parse_gtfs_rt_data(gtfs_rt_feed)
+        gtfs_rt_lookup = load_rt_lookup()
 
         for trip in self._lookup["trips"].values():
 
@@ -114,20 +114,31 @@ class Monitor:
                     and check_arrival_within_window(stop_time.arrival_time, time_window=query.time_window)
                 ):  # match service calendar, stop ID and arrival within specified time window to pinpoint a stop_time
 
-                    trip_update = gtfs_rt_data.get(trip.id, None)
-                    if not trip_update:
+                    # get realtime data about the found trip
+                    rt_trip_update = gtfs_rt_lookup["trip_updates"].get(trip.id, None)
+                    rt_vehicle_pos = gtfs_rt_lookup["vehicle_positions"].get(trip.id, None)
+                    if not rt_trip_update:
                         continue
 
-                    stop_time_update = resolve_closest_stop(stop_time.sequence, trip_update.stop_time_update)
+                    # get most recent stop time update (uses stop sequence)
+                    stop_time_update = resolve_closest_stop(stop_time.sequence, rt_trip_update.stop_time_update)
                     if not stop_time_update:
                         continue
 
+                    # calculate arrival times and get vehicle data
                     arrival_time = ArrivalTime(stop_time, stop_time_update)
-                    vehicle = self._lookup["vehicles"].get(trip_update.vehicle.id, None)
+                    vehicle = self._lookup["vehicles"].get(rt_trip_update.vehicle.id, None)
 
                     results.append(
                         DepartureResult(
-                            stop, stop_time, route, trip, vehicle, stop_time_update.stop_sequence, arrival_time
+                            stop,
+                            stop_time,
+                            route,
+                            trip,
+                            vehicle,
+                            stop_time_update.stop_sequence,
+                            arrival_time,
+                            rt_vehicle_pos.position,
                         )
                     )
         return results

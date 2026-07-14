@@ -16,6 +16,7 @@ from .data import FeedInfo
 from .time_utils import convert_feed_info_date
 
 GTFS_RT_TRIP_UPDATES_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=trip_updates.pb"
+GTFS_RT_VEHICLE_POSITIONS_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=vehicle_positions.pb"
 VEHICLE_DICTIONARY_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile/?file=vehicle_dictionary.csv"
 VEHICLE_DICTIONARY_NAME = "vehicle_dictionary.csv"
 GTFS_FILE_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
@@ -39,11 +40,11 @@ def download_file(filename: str, url: str) -> None:
             f.write(chunk)
 
 
-def fetch_gtfs_rt_feed() -> RepeatedCompositeFieldContainer[FeedEntity]:
-    """Fetch most recent GTFS realtime feed with trip updates."""
+def fetch_gtfs_rt_feed(url: str) -> RepeatedCompositeFieldContainer[FeedEntity]:
+    """Fetch most recent GTFS realtime feed from specified URL."""
 
     feed = gtfs_realtime_pb2.FeedMessage()
-    response = requests.get(GTFS_RT_TRIP_UPDATES_URL)
+    response = requests.get(url)
     response.raise_for_status()
     feed.ParseFromString(response.content)
     return feed.entity
