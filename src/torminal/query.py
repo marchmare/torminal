@@ -1,31 +1,22 @@
 from google.transit.gtfs_realtime_pb2 import TripUpdate, Position
 from datetime import datetime, timedelta
 from dataclasses import dataclass
-from .gtfs import GTFSLookup, resolve_service_calendar, load_rt_lookup
-
-from .time_utils import check_arrival_within_window, convert_time_to_today, convert_time_to_gtfs
-from .data import StopTime, Stop, Route, Vehicle, Trip
-
-
-def resolve_closest_stop(
-    sequence: int, stop_time_updates: list[TripUpdate.StopTimeUpdate]
-) -> TripUpdate.StopTimeUpdate:
-    """Out of Stop Time Update list entries, find the one that is closest to the queried stop sequence."""
-
-    previous_stops = (update for update in stop_time_updates if update.stop_sequence < sequence)
-    return max(previous_stops, key=lambda update: update.stop_sequence, default=None)
+from torminal.gtfs.realtime import fetch_gtfs_rt_feed
+from torminal.gtfs.utils import resolve_service_calendar, resolve_closest_stop
+from torminal.gtfs.time import check_arrival_within_window, convert_time_to_today, convert_time_to_gtfs
+from torminal.gtfs.data import StopTime, Stop, Route, Vehicle, Trip, Position
 
 
 class Query:
     """Class representing a single stop-line query added by user to monitor departures and wanted time window for upcoming arrivals."""
 
-    def __init__(self, stop_id: str | int, route_id: str | int, time_window: int) -> None:
-        self.stop_id = str(stop_id)
+    def __init__(self, stop_code: str | int, route_id: str | int, time_window: int) -> None:
+        self.stop_code = str(stop_code)
         self.route_id = str(route_id)
         self.time_window = time_window
 
     def __repr__(self) -> str:
-        return f"stop ID: {self.stop_id}, route ID: {self.route_id}, time window: {self.time_window} min"
+        return f"stop ID: {self.stop_code}, route ID: {self.route_id}, time window: {self.time_window} min"
 
 
 class ArrivalTime:
@@ -83,7 +74,7 @@ class DepartureResult:
 class Monitor:
     """Monitor performing query polls."""
 
-    def __init__(self, lookup: GTFSLookup) -> None:
+    def __init__(self, lookup) -> None:
         self._lookup = lookup
 
     def poll(self, query: Query) -> list[DepartureResult]:
@@ -91,8 +82,8 @@ class Monitor:
 
         print(f"Polling {query}")
 
-        stop = self._lookup["stops"].get(query.stop_id, None)
-        route = self._lookup["routes"].get(query.route_id, None)
+        stop = self._lookup.stops.get(query.stop_code, None)
+        route = self._lookup.routes.get(query.route_id, None)
         results: list[DepartureResult] = []
 
         service = resolve_service_calendar(self._lookup)
@@ -100,14 +91,14 @@ class Monitor:
         if not service or not route or not stop:
             return results
 
-        gtfs_rt_lookup = load_rt_lookup()
+        gtfs_rt_feed = fetch_gtfs_rt_feed()
 
-        for trip in self._lookup["trips"].values():
+        for trip in self._lookup.trips.values():
 
             if trip.route_id != route.id:
                 continue
 
-            for stop_time in self._lookup["trip_stops"][trip.id].items:
+            for stop_time in self._lookup.trip_stops[trip.id].items:
                 if (
                     trip.service_id == service.id
                     and stop.id == stop_time.stop_id
@@ -115,8 +106,8 @@ class Monitor:
                 ):  # match service calendar, stop ID and arrival within specified time window to pinpoint a stop_time
 
                     # get realtime data about the found trip
-                    rt_trip_update = gtfs_rt_lookup["trip_updates"].get(trip.id, None)
-                    rt_vehicle_pos = gtfs_rt_lookup["vehicle_positions"].get(trip.id, None)
+                    rt_trip_update = gtfs_rt_feed.trip_updates.get(trip.id, None)
+                    rt_vehicle_pos = gtfs_rt_feed.vehicle_positions.get(trip.id, None)
                     if not rt_trip_update:
                         continue
 
@@ -127,7 +118,8 @@ class Monitor:
 
                     # calculate arrival times and get vehicle data
                     arrival_time = ArrivalTime(stop_time, stop_time_update)
-                    vehicle = self._lookup["vehicles"].get(rt_trip_update.vehicle.id, None)
+                    vehicle = self._lookup.vehicles.get(rt_trip_update.vehicle.id, None)
+                    position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
 
                     results.append(
                         DepartureResult(
@@ -138,7 +130,7 @@ class Monitor:
                             vehicle,
                             stop_time_update.stop_sequence,
                             arrival_time,
-                            rt_vehicle_pos.position,
+                            position,
                         )
                     )
         return results

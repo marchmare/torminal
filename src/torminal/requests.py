@@ -12,8 +12,8 @@ from datetime import datetime
 from io import TextIOWrapper
 from contextlib import contextmanager
 
-from .data import FeedInfo
-from .time_utils import convert_feed_info_date
+from torminal.gtfs.data import FeedInfo
+from torminal.gtfs.time import convert_feed_info_date
 
 GTFS_RT_TRIP_UPDATES_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=trip_updates.pb"
 GTFS_RT_VEHICLE_POSITIONS_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=vehicle_positions.pb"
@@ -30,8 +30,6 @@ HEADERS = {
 
 def download_file(filename: str, url: str) -> None:
     """Download file helper function."""
-
-    print(f"\t ⬩ downloading {filename}")
     response = requests.get(url, headers=HEADERS, stream=True)
     response.raise_for_status()
 
@@ -40,8 +38,8 @@ def download_file(filename: str, url: str) -> None:
             f.write(chunk)
 
 
-def fetch_gtfs_rt_feed(url: str) -> RepeatedCompositeFieldContainer[FeedEntity]:
-    """Fetch most recent GTFS realtime feed from specified URL."""
+def fetch_protobuf(url: str) -> RepeatedCompositeFieldContainer[FeedEntity]:
+    """Fetch GTFS Protobuf feed from specified URL."""
 
     feed = gtfs_realtime_pb2.FeedMessage()
     response = requests.get(url)
@@ -51,7 +49,7 @@ def fetch_gtfs_rt_feed(url: str) -> RepeatedCompositeFieldContainer[FeedEntity]:
 
 
 def gtfs_needs_update() -> bool:
-    """Verify if GTFS zip exists and if it's up to date."""
+    """Verify if GTFS archive exists and if it's up to date."""
 
     gtfs_path = Path(GTFS_FILE_NAME)
 
