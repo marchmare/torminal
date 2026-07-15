@@ -15,6 +15,7 @@ from contextlib import contextmanager
 from time import time
 from torminal.gtfs.data import FeedInfo
 from torminal.gtfs.time import convert_feed_info_date
+from platformdirs import user_config_dir, user_cache_dir
 
 GTFS_RT_TRIP_UPDATES_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=trip_updates.pb"
 GTFS_RT_VEHICLE_POSITIONS_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=vehicle_positions.pb"
@@ -23,6 +24,11 @@ VEHICLE_DICTIONARY_NAME = "vehicle_dictionary.csv"
 GTFS_FILE_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
 GTFS_FILE_NAME = "ZTMPoznanGTFS.zip"
 PEKA_VM_URL = "https://www.peka.poznan.pl/vm/method.vm"
+
+CACHE_DIR = Path(user_cache_dir("TORminal", "marchmare"))
+CONFIG_DIR = Path(user_config_dir("TORminal", "marchmare"))
+CACHE_DIR.mkdir(parents=True, exist_ok=True)
+CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
 HEADERS = {
     "Accept": "application/octet-stream",
@@ -35,7 +41,7 @@ def download_file(filename: str, url: str) -> None:
     response = requests.get(url, headers=HEADERS, stream=True)
     response.raise_for_status()
 
-    with open(filename, "wb") as f:
+    with open(f"{CACHE_DIR}/{filename}", "wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)
 
@@ -69,12 +75,12 @@ def fetch_form_post(url: str, method: str, params: dict[str, Any]) -> Any:
 def gtfs_needs_update() -> bool:
     """Verify if GTFS archive exists and if it's up to date."""
 
-    gtfs_path = Path(GTFS_FILE_NAME)
+    gtfs_path = Path(CONFIG_DIR / GTFS_FILE_NAME)
 
     if not gtfs_path.exists():
         return True
 
-    with ZipFile(GTFS_FILE_NAME) as z:
+    with ZipFile(f"{CACHE_DIR}/{GTFS_FILE_NAME}") as z:
         with z.open(FeedInfo._gtfs_file) as f:
             reader = csv.DictReader(TextIOWrapper(f, encoding="utf-8-sig"))
             row = next(reader)
@@ -93,7 +99,7 @@ def open_gtfs_zip() -> Generator[ZipFile, Any, None]:
     if gtfs_needs_update():
         download_file(GTFS_FILE_NAME, GTFS_FILE_URL)
 
-    with ZipFile(GTFS_FILE_NAME) as z:
+    with ZipFile(f"{CACHE_DIR}/{GTFS_FILE_NAME}") as z:
         yield z
 
 
@@ -106,5 +112,5 @@ def open_vehicle_dictionary() -> Generator[csv.DictReader, Any, None]:
     """
     download_file(VEHICLE_DICTIONARY_NAME, VEHICLE_DICTIONARY_URL)
 
-    with open(VEHICLE_DICTIONARY_NAME, "r") as file:
+    with open(f"{CACHE_DIR}/{VEHICLE_DICTIONARY_NAME}", "r") as file:
         yield csv.DictReader(file)

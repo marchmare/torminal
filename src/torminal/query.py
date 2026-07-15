@@ -22,15 +22,18 @@ class Query:
 class ArrivalTime:
     """Class calculating planned and live arrival times"""
 
-    def __init__(self, stop_time: StopTime, stop_time_update: TripUpdate.StopTimeUpdate) -> None:
+    def __init__(self, stop_time: StopTime, stop_time_update: TripUpdate.StopTimeUpdate | None) -> None:
         self.planned = stop_time.arrival_time
         self.planned_eta = self.estimate_arrival(stop_time.arrival_time)
 
-        arrival_live_time = self.add_delay(stop_time.arrival_time, stop_time_update.arrival.delay)
-        self.live = arrival_live_time if stop_time_update.stop_sequence > 0 else None
-        self.live_eta = self.estimate_arrival(arrival_live_time) if stop_time_update.stop_sequence > 0 else None
-
-        self.delay = stop_time_update.arrival.delay
+        self.live = None
+        self.live_eta = None
+        self.delay = 0
+        if stop_time_update:
+            arrival_live_time = self.add_delay(stop_time.arrival_time, stop_time_update.arrival.delay)
+            self.live = arrival_live_time if stop_time_update.stop_sequence > 0 else None
+            self.live_eta = self.estimate_arrival(arrival_live_time) if stop_time_update.stop_sequence > 0 else None
+            self.delay = stop_time_update.arrival.delay
 
     def __repr__(self) -> str:
         fields = (
@@ -101,6 +104,7 @@ class Monitor:
                 continue
 
             for stop_time in self._lookup.trip_stops[trip.id].items:
+
                 if (
                     trip.service_id == service.id
                     and stop.id == stop_time.stop_id
@@ -110,18 +114,18 @@ class Monitor:
                     # get realtime data about the found trip
                     rt_trip_update = gtfs_rt_feed.trip_updates.get(trip.id, None)
                     rt_vehicle_pos = gtfs_rt_feed.vehicle_positions.get(trip.id, None)
-                    if not rt_trip_update:
-                        continue
 
-                    # get most recent stop time update (uses stop sequence)
-                    stop_time_update = resolve_closest_stop(stop_time.sequence, rt_trip_update.stop_time_update)
-                    if not stop_time_update:
-                        continue
+                    stop_time_update = None
+                    vehicle = None
+                    position = None
+                    if rt_trip_update:
+                        # TODO: refactor parts when realtime might be not accessible, but estimation can be still
+                        # made from scheduled routes
+                        stop_time_update = resolve_closest_stop(stop_time.sequence, rt_trip_update.stop_time_update)
+                        vehicle = self._lookup.vehicles.get(rt_trip_update.vehicle.id, None)
+                        position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
 
-                    # calculate arrival times and get vehicle data
                     arrival_time = ArrivalTime(stop_time, stop_time_update)
-                    vehicle = self._lookup.vehicles.get(rt_trip_update.vehicle.id, None)
-                    position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
                     message = peka_rt_feed.message
 
                     results.append(
@@ -131,7 +135,7 @@ class Monitor:
                             route,
                             trip,
                             vehicle,
-                            stop_time_update.stop_sequence,
+                            stop_time_update.stop_sequence if stop_time_update else None,
                             arrival_time,
                             position,
                             message,
