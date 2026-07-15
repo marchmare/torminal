@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from google.transit.gtfs_realtime_pb2 import TripUpdate, VehiclePosition
+
 from torminal.requests import (
     fetch_protobuf,
     fetch_form_post,

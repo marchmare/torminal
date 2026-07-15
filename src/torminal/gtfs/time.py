@@ -5,6 +5,11 @@ from datetime import datetime, date, timedelta
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 
 
+def covert_today_to_feed_info() -> str:
+    """Convert today's date to feed info like (YYYYMMDD e.g. 20260717)."""
+    return datetime.today().strftime("%Y%m%d")
+
+
 def convert_feed_info_date(date_str: str) -> datetime:
     """Convert feed info date string (YYYYMMDD e.g. 20260717) to date object."""
 
@@ -29,5 +34,4 @@ def check_arrival_within_window(arrival_time: str, time_window: int) -> bool:
     time_start = datetime.now()
     time_end = time_start + timedelta(minutes=time_window)
     stop_time = convert_time_to_today(arrival_time)
-
     return time_start < stop_time < time_end

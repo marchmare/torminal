@@ -1,6 +1,8 @@
 from google.transit.gtfs_realtime_pb2 import TripUpdate, Position
 from datetime import datetime, timedelta
 from dataclasses import dataclass
+from typing import Any
+
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.gtfs.utils import resolve_service_calendar, resolve_closest_stop
 from torminal.gtfs.time import check_arrival_within_window, convert_time_to_today, convert_time_to_gtfs
@@ -72,7 +74,7 @@ class DepartureResult:
     current_stop_sequence: int
     arrival: ArrivalTime
     position: Position
-    message: str
+    message: dict[str, dict[Any, Any]]
 
 
 class Monitor:

@@ -1,5 +1,10 @@
+import csv
 from typing import Callable, TypeVar
 from dataclasses import dataclass
+from csv import DictReader
+from zipfile import ZipFile
+from io import TextIOWrapper
+
 from torminal.requests import open_gtfs_zip, open_vehicle_dictionary
 from torminal.gtfs.data import (
     Trip,
@@ -13,10 +18,6 @@ from torminal.gtfs.data import (
     GroupModel,
     Model,
 )
-from csv import DictReader
-import csv
-from zipfile import ZipFile
-from io import TextIOWrapper
 
 
 @dataclass
@@ -61,7 +62,6 @@ class GTFSStaticLoader:
 
     def load(self) -> GTFSStaticFeed:
         """Load GTFS static data."""
-
         self._emit_progress("Loading vehicle_dictionary.csv")
         with open_vehicle_dictionary() as vd:
             vehicles = parse_vehicle_dictionary(vd)
