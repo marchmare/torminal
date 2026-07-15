@@ -2,6 +2,7 @@
 
 import requests
 import csv
+import json
 from typing import Any, Generator
 from google.protobuf.internal.containers import RepeatedCompositeFieldContainer
 from google.transit import gtfs_realtime_pb2
@@ -11,7 +12,7 @@ from zipfile import ZipFile
 from datetime import datetime
 from io import TextIOWrapper
 from contextlib import contextmanager
-
+from time import time
 from torminal.gtfs.data import FeedInfo
 from torminal.gtfs.time import convert_feed_info_date
 
@@ -21,10 +22,11 @@ VEHICLE_DICTIONARY_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRt
 VEHICLE_DICTIONARY_NAME = "vehicle_dictionary.csv"
 GTFS_FILE_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGTFSFile"
 GTFS_FILE_NAME = "ZTMPoznanGTFS.zip"
+PEKA_VM_URL = "https://www.peka.poznan.pl/vm/method.vm"
 
 HEADERS = {
     "Accept": "application/octet-stream",
-    "Content-Type": "application/x-www-form-urlencoded",
+    "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
 }
 
 
@@ -46,6 +48,22 @@ def fetch_protobuf(url: str) -> RepeatedCompositeFieldContainer[FeedEntity]:
     response.raise_for_status()
     feed.ParseFromString(response.content)
     return feed.entity
+
+
+def fetch_form_post(url: str, method: str, params: dict[str, Any]) -> Any:
+    """Fetch response from URL using form POST with JSON blobs inside parameters."""
+
+    params = json.dumps(params)
+    payload = {"method": method, "p0": params}
+
+    response = requests.post(
+        url,
+        params={"ts": int(time() * 1000)},
+        data=payload,
+        headers=HEADERS,
+    )
+    response.raise_for_status()
+    return response.json()
 
 
 def gtfs_needs_update() -> bool:

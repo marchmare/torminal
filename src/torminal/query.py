@@ -1,7 +1,7 @@
 from google.transit.gtfs_realtime_pb2 import TripUpdate, Position
 from datetime import datetime, timedelta
 from dataclasses import dataclass
-from torminal.gtfs.realtime import fetch_gtfs_rt_feed
+from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.gtfs.utils import resolve_service_calendar, resolve_closest_stop
 from torminal.gtfs.time import check_arrival_within_window, convert_time_to_today, convert_time_to_gtfs
 from torminal.gtfs.data import StopTime, Stop, Route, Vehicle, Trip, Position
@@ -69,6 +69,7 @@ class DepartureResult:
     current_stop_sequence: int
     arrival: ArrivalTime
     position: Position
+    message: str
 
 
 class Monitor:
@@ -92,6 +93,7 @@ class Monitor:
             return results
 
         gtfs_rt_feed = fetch_gtfs_rt_feed()
+        peka_rt_feed = fetch_peka_vm_feed(stop)
 
         for trip in self._lookup.trips.values():
 
@@ -120,6 +122,7 @@ class Monitor:
                     arrival_time = ArrivalTime(stop_time, stop_time_update)
                     vehicle = self._lookup.vehicles.get(rt_trip_update.vehicle.id, None)
                     position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
+                    message = peka_rt_feed.message
 
                     results.append(
                         DepartureResult(
@@ -131,6 +134,7 @@ class Monitor:
                             stop_time_update.stop_sequence,
                             arrival_time,
                             position,
+                            message,
                         )
                     )
         return results
