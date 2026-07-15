@@ -1,0 +1,30 @@
+LoadingScreen {
+    align: center middle;
+    background: $background 60%;
+}
+
+.box {
+    width: 60;
+    height: auto;
+    padding: 1 2;
+    border: solid $primary;
+    background: $panel;
+    layout: vertical;
+    align: center middle;
+}
+
+.box Label {
+    width: 100%;
+    content-align: center middle;
+    margin-bottom: 1;
+}
+
+.box ProgressBar {
+    width: 100%;
+    align-horizontal: center;
+}
+
+.box Label#loading_message {
+    text-style: italic;
+    color: $panel-lighten-3;
+}
