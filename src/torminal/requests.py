@@ -15,6 +15,7 @@ from platformdirs import user_config_dir, user_cache_dir
 from bs4 import BeautifulSoup
 
 from torminal.gtfs.time import covert_today_to_feed_info
+from torminal.gtfs.data import GTFSArchive
 
 GTFS_RT_TRIP_UPDATES_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=trip_updates.pb"
 GTFS_RT_VEHICLE_POSITIONS_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=vehicle_positions.pb"
@@ -73,16 +74,6 @@ def fetch_form_post(url: str, method: str, params: dict[str, Any]) -> Any:
     return response.json()
 
 
-class GTFSArchive:
-    """Metadata of GTFS archive listed on https://www.ztm.poznan.pl/otwarte-dane/gtfsfiles/"""
-
-    def __init__(self, filename: str, modified: str) -> None:
-        self.filename = filename
-        self.start_date = filename.split("_")[0]
-        self.end_date = filename.split("_")[1].split(".")[0]
-        self.modified = modified
-
-
 def get_gtfs_archive_list() -> list[GTFSArchive]:
     """
     Scrape list of available GTFS archives from https://www.ztm.poznan.pl/otwarte-dane/gtfsfiles/
@@ -132,7 +123,15 @@ def open_gtfs_zip() -> Generator[ZipFile, Any, None]:
     if not current_archive:
         raise RuntimeError("No available GTFS archive.")
 
-    download_file(output_file=GTFS_FILE_NAME, url=GTFS_FILE_URL, params=f"/?file={current_archive.filename}")
+    # Schedule of ZTM publications of the GTFS archive are still mystery to me,
+    # sometimes it uses the most recent one and sometimes the one that came before (since the newest one is usually published ahead of time)
+    #
+    # Leaving those two lines in case they're need to be switched,
+    # potential way to workaround this: download and load two datasets, swap if one doesn't yield any results,
+    # ideally with some early check during loading
+    #
+    # download_file(output_file=GTFS_FILE_NAME, url=GTFS_FILE_URL, params=f"/?file={current_archive.filename}")
+    download_file(output_file=GTFS_FILE_NAME, url=GTFS_FILE_URL)
 
     with ZipFile(f"{CACHE_DIR}/{GTFS_FILE_NAME}") as z:
         yield z

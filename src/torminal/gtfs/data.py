@@ -2,8 +2,9 @@
 
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
-from typing import Literal, TypeVar, Self, ClassVar, Generic
+from typing import Literal, TypeVar, Self, ClassVar, Generic, Any
 from abc import ABC, abstractmethod
+from bs4 import BeautifulSoup
 
 
 class Model(ABC):
@@ -81,6 +82,48 @@ class Position:
     latitude: float
 
 
+@dataclass
+class BollardMessage:
+    """Message displayed on a stop bollard."""
+
+    start_date: str
+    end_date: str
+    link: str
+    message: str
+
+    @classmethod
+    def from_dict(cls, row: dict[str, Any]) -> Self:
+        soup = BeautifulSoup(row["content"], "html.parser")
+        link = soup.find("a")["href"].strip() if soup.find("a") else None
+        text = soup.get_text(" ", strip=True)
+        return cls(start_date=row["startDate"], end_date=row["endDate"], link=link, message=text)
+
+
+@dataclass
+class BollardMessages(GroupModel[BollardMessage]):
+    """List of messages displayed on stop bollards."""
+
+    _item_model = BollardMessage
+
+    items: list[BollardMessage] = field(default_factory=list)
+
+    @classmethod
+    def from_dict(cls, items: list[dict]) -> Self:
+        return cls(items=[BollardMessage.from_dict(item) for item in items])
+
+    def get_current(self) -> BollardMessage:
+        """Get the bollard info that applies in the most recent time period and includes today's date."""
+        # sort by start day, from latest to earliest
+        # pick the first that includes todays date
+
+        # sorted_items = sorted(self.items, key=lambda item: item.start_date)
+        return self.items[0]
+
+    # for archive in archives:
+    #     if archive.start_date <= today <= archive.end_date:
+    #         return archive
+
+
 ### GTFS static data:
 """
                         ┌──────────────────┐                                                
@@ -111,6 +154,16 @@ class Position:
                         │                  │                                                
                         └──────────────────┘                                                
 """
+
+
+class GTFSArchive:
+    """Metadata of GTFS archive listed on https://www.ztm.poznan.pl/otwarte-dane/gtfsfiles/"""
+
+    def __init__(self, filename: str, modified: str) -> None:
+        self.filename = filename
+        self.start_date = filename.split("_")[0]
+        self.end_date = filename.split("_")[1].split(".")[0]
+        self.modified = modified
 
 
 class Direction(IntEnum):
@@ -395,3 +448,21 @@ class TripStops(GroupModel[StopTime]):
     @classmethod
     def from_dict(cls, row: dict[str, str]) -> Self:
         return cls(id=row["trip_id"], headsign=row["stop_headsign"])
+
+
+### Custom TORminal-native data
+
+
+class VehicleStatus(IntEnum):
+    RUNNING = 0
+    """Going according to plan"""
+    DELAYED = 1
+    """Delay exceeding tolerance, but otherwise moving along typical path"""
+    RUSHED = 2
+    """Negative delay exceeding tolerance, but otherwise moving along typical path"""
+    DETOURED = 3
+    """Vehicle outside of defined path"""
+    STUCK = 4
+    """Vehicle not moving for extended time"""
+    AT_TERMINUS = 5
+    """Vehicle is waiting to begin its trip"""

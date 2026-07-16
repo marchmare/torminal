@@ -6,7 +6,7 @@ from typing import Any
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.gtfs.utils import resolve_service_calendar, resolve_closest_stop
 from torminal.gtfs.time import check_arrival_within_window, convert_time_to_today, convert_time_to_gtfs
-from torminal.gtfs.data import StopTime, Stop, Route, Vehicle, Trip, Position
+from torminal.gtfs.data import StopTime, Stop, Route, Vehicle, Trip, Position, BollardMessages, BollardMessage
 
 
 class Query:
@@ -99,7 +99,7 @@ class Monitor:
 
         gtfs_rt_feed = fetch_gtfs_rt_feed()
         peka_rt_feed = fetch_peka_vm_feed(stop)
-
+        print(peka_rt_feed)
         for trip in self._lookup.trips.values():
 
             if trip.route_id != route.id:
@@ -128,7 +128,8 @@ class Monitor:
                         position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
 
                     arrival_time = ArrivalTime(stop_time, stop_time_update)
-                    message = peka_rt_feed.message
+                    _messages = BollardMessages.from_dict(peka_rt_feed.message)
+                    message = _messages.get_current()
 
                     results.append(
                         DepartureResult(
