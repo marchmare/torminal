@@ -42,7 +42,6 @@ def download_file(output_file: str, url: str, params: Optional[str] = "") -> Non
     _url = f"{url}{params}"
     response = requests.get(_url, headers=HEADERS, stream=True)
     response.raise_for_status()
-
     with open(f"{CACHE_DIR}/{output_file}", "wb") as f:
         for chunk in response.iter_content(chunk_size=8192):
             f.write(chunk)

@@ -41,6 +41,9 @@ def gtfs_time_to_dt(time: str) -> time:
     """
     Convert GTFS date string (HH:MM:SS e.g. 20:34:00) to datetime object.
     Time string is normalized in case it overlaps onto the next day (e.g. 25:01:00 -> 01:01:00).
+
+    Important: the normalization most likely will introduce bugs, especially when calculating
+    deltas around midnight.
     """
 
     _time = time.split(":")

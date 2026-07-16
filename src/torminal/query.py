@@ -30,7 +30,9 @@ class ArrivalTime:
     live_eta: int | None
     delay: int
 
-    def __init__(self, stop_time: StopTime, stop_time_update: TripUpdate.StopTimeUpdate | None) -> None:
+    def __init__(
+        self, stop_time: StopTime, stop_time_update: TripUpdate.StopTimeUpdate | None, status: str | None
+    ) -> None:
         self.planned = stop_time.arrival_time
         self.planned_eta = self.estimate_arrival(stop_time.arrival_time)
 
@@ -38,9 +40,11 @@ class ArrivalTime:
         self.live_eta = None
         self.delay = 0
         if stop_time_update:
-            arrival_live_time = stop_time.arrival_time + timedelta(seconds=stop_time_update.arrival.delay)
-            self.live = arrival_live_time if stop_time_update.stop_sequence > 0 else None
-            self.live_eta = self.estimate_arrival(arrival_live_time) if stop_time_update.stop_sequence > 0 else None
+            arrival_live_time = combine_today(stop_time.arrival_time) + timedelta(
+                seconds=stop_time_update.arrival.delay
+            )
+            self.live = arrival_live_time.time() if status != "INCOMING_AT" else None
+            self.live_eta = self.estimate_arrival(self.live) if status != "INCOMING_AT" else None
             self.delay = stop_time_update.arrival.delay
 
     def __repr__(self) -> str:
@@ -54,18 +58,10 @@ class ArrivalTime:
         return f"{self.__class__.__name__}({', '.join(fields)})"
 
     @staticmethod
-    def estimate_arrival(arrival_time: str) -> int:
+    def estimate_arrival(arrival_time: time) -> int:
         """Calculate how many minutes are left till vehicle departs."""
-
-        time_start = datetime.now()
-        delta = combine_today(arrival_time) - time_start
+        delta = combine_today(arrival_time) - datetime.now()
         return int(delta.total_seconds() // 60)
-
-    # @staticmethod
-    # def add_delay(arrival_time: str, delay: int) -> str:
-    #     """Add GTFS-RT delay values (seconds integer) to the arrival time in GTFS static format (%H:%M:%S)."""
-
-    #     return convert_time_to_gtfs(arrival_time + timedelta(seconds=delay))
 
 
 @dataclass
@@ -78,7 +74,7 @@ class DepartureResult:
     current_stop_sequence: int
     arrival: ArrivalTime
     position: Position
-    message: dict[str, dict[Any, Any]]
+    message: BollardMessage
 
 
 class Monitor:
@@ -109,7 +105,6 @@ class Monitor:
                 continue
 
             for stop_time in self._lookup.trip_stops[trip.id].items:
-
                 if (
                     trip.service_id == service.id
                     and stop.id == stop_time.stop_id
@@ -123,6 +118,9 @@ class Monitor:
                     stop_time_update = None
                     vehicle = None
                     position = None
+                    status = None
+                    if rt_vehicle_pos:
+                        status = rt_vehicle_pos.current_status if hasattr(rt_vehicle_pos, "current_status") else None
                     if rt_trip_update:
                         # TODO: refactor parts when realtime might be not accessible, but estimation can be still
                         # made from scheduled routes
@@ -130,7 +128,7 @@ class Monitor:
                         vehicle = self._lookup.vehicles.get(rt_trip_update.vehicle.id, None)
                         position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
 
-                    arrival_time = ArrivalTime(stop_time, stop_time_update)
+                    arrival_time = ArrivalTime(stop_time, stop_time_update, status)
                     _messages = BollardMessages.from_dict(peka_rt_feed.message)
                     message = _messages.get_current()
 

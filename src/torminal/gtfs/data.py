@@ -86,16 +86,16 @@ class Position:
 
 
 @dataclass
-class BollardMessage:
+class BollardMessage(Model):
     """Message displayed on a stop bollard."""
 
     start_date: datetime
     end_date: datetime
-    link: str
+    link: str | None
     message: str
 
     @classmethod
-    def from_dict(cls, row: dict[str, Any]) -> Self:
+    def from_dict(cls, row: str) -> Self:
         soup = BeautifulSoup(row["content"], "html.parser")
         link = soup.find("a")["href"].strip() if soup.find("a") else None
         text = soup.get_text(" ", strip=True)
@@ -103,7 +103,7 @@ class BollardMessage:
         return cls(
             start_date=iso_to_dt(row["startDate"]),
             end_date=iso_to_dt(row["endDate"]),
-            link=link,
+            link=str(link) if link else None,
             message=text,
         )
 
@@ -117,7 +117,7 @@ class BollardMessages(GroupModel[BollardMessage]):
     items: list[BollardMessage] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, items: list[dict]) -> Self:
+    def from_dict(cls, items: dict[str, dict[Any, Any]]) -> Self:
         return cls(items=[BollardMessage.from_dict(item) for item in items])
 
     def get_current(self) -> BollardMessage:
@@ -127,10 +127,6 @@ class BollardMessages(GroupModel[BollardMessage]):
 
         # sorted_items = sorted(self.items, key=lambda item: item.start_date)
         return self.items[0]
-
-    # for archive in archives:
-    #     if archive.start_date <= today <= archive.end_date:
-    #         return archive
 
 
 ### GTFS static data:
@@ -475,3 +471,5 @@ class VehicleStatus(IntEnum):
     """Vehicle not moving for extended time"""
     AT_TERMINUS = 5
     """Vehicle is waiting to begin its trip"""
+    NO_RT = 6
+    """There's no RT data available for this trip"""
