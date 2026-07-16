@@ -1,17 +1,23 @@
 from torminal.gtfs.static import GTFSStaticLoader
 from torminal.query import Monitor, Query
+from torminal.tui.app import TORminal
 
 
 def app() -> None:
     print("🚋 TORminal")
+    # # app = TORminal()
+    # app.run()
     loader = GTFSStaticLoader(print_update)
     lookup = loader.load()
-    query = Query("NARA71", 10, 60)
+    print(lookup.feed_info)
+    query = Query("NARA71", 214, 60)
     monitor = Monitor(lookup)
-    result = monitor.poll(query)
-    for r in result:
-        print("\nDEPARTURE:")
-        print(r)
+
+    matches = monitor.resolve_query(query)
+
+    for match in matches:
+        result = monitor.poll(match)
+        print(result)
 
 
 def print_update(progress):
