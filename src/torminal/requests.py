@@ -13,8 +13,8 @@ from contextlib import contextmanager
 from time import time
 from platformdirs import user_config_dir, user_cache_dir
 from bs4 import BeautifulSoup
+from datetime import datetime
 
-from torminal.gtfs.time import covert_today_to_feed_info
 from torminal.gtfs.data import GTFSArchive
 
 GTFS_RT_TRIP_UPDATES_URL = "https://www.ztm.poznan.pl/pl/dla-deweloperow/getGtfsRtFile?file=trip_updates.pb"
@@ -104,7 +104,7 @@ def resolve_current_gtfs_archive() -> GTFSArchive | None:
     ZTM publishes GTFS archives ahead of time and with overlapping dates.
     """
     archives = get_gtfs_archive_list()
-    today = covert_today_to_feed_info()
+    today = datetime.today().date()
 
     for archive in archives:
         if archive.start_date <= today <= archive.end_date:
@@ -130,8 +130,8 @@ def open_gtfs_zip() -> Generator[ZipFile, Any, None]:
     # potential way to workaround this: download and load two datasets, swap if one doesn't yield any results,
     # ideally with some early check during loading
     #
-    # download_file(output_file=GTFS_FILE_NAME, url=GTFS_FILE_URL, params=f"/?file={current_archive.filename}")
-    download_file(output_file=GTFS_FILE_NAME, url=GTFS_FILE_URL)
+    download_file(output_file=GTFS_FILE_NAME, url=GTFS_FILE_URL, params=f"/?file={current_archive.filename}")
+    # download_file(output_file=GTFS_FILE_NAME, url=GTFS_FILE_URL)
 
     with ZipFile(f"{CACHE_DIR}/{GTFS_FILE_NAME}") as z:
         yield z

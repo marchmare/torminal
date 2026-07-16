@@ -1,11 +1,11 @@
 from google.transit.gtfs_realtime_pb2 import TripUpdate, Position
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, time, date
 from dataclasses import dataclass
 from typing import Any
 
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.gtfs.utils import resolve_service_calendar, resolve_closest_stop
-from torminal.gtfs.time import check_arrival_within_window, convert_time_to_today, convert_time_to_gtfs
+from torminal.gtfs.time import check_arrival_within_window, combine_today
 from torminal.gtfs.data import StopTime, Stop, Route, Vehicle, Trip, Position, BollardMessages, BollardMessage
 
 
@@ -24,6 +24,12 @@ class Query:
 class ArrivalTime:
     """Class calculating planned and live arrival times"""
 
+    planned: time
+    planned_eta: int
+    live: time | None
+    live_eta: int | None
+    delay: int
+
     def __init__(self, stop_time: StopTime, stop_time_update: TripUpdate.StopTimeUpdate | None) -> None:
         self.planned = stop_time.arrival_time
         self.planned_eta = self.estimate_arrival(stop_time.arrival_time)
@@ -32,7 +38,7 @@ class ArrivalTime:
         self.live_eta = None
         self.delay = 0
         if stop_time_update:
-            arrival_live_time = self.add_delay(stop_time.arrival_time, stop_time_update.arrival.delay)
+            arrival_live_time = stop_time.arrival_time + timedelta(seconds=stop_time_update.arrival.delay)
             self.live = arrival_live_time if stop_time_update.stop_sequence > 0 else None
             self.live_eta = self.estimate_arrival(arrival_live_time) if stop_time_update.stop_sequence > 0 else None
             self.delay = stop_time_update.arrival.delay
@@ -52,16 +58,14 @@ class ArrivalTime:
         """Calculate how many minutes are left till vehicle departs."""
 
         time_start = datetime.now()
-        _arrival_time = convert_time_to_today(arrival_time)
-        delta = _arrival_time - time_start
+        delta = combine_today(arrival_time) - time_start
         return int(delta.total_seconds() // 60)
 
-    @staticmethod
-    def add_delay(arrival_time: str, delay: int) -> str:
-        """Add GTFS-RT delay values (seconds integer) to the arrival time in GTFS static format (%H:%M:%S)."""
+    # @staticmethod
+    # def add_delay(arrival_time: str, delay: int) -> str:
+    #     """Add GTFS-RT delay values (seconds integer) to the arrival time in GTFS static format (%H:%M:%S)."""
 
-        _arrival_time = convert_time_to_today(arrival_time)
-        return convert_time_to_gtfs(_arrival_time + timedelta(seconds=delay))
+    #     return convert_time_to_gtfs(arrival_time + timedelta(seconds=delay))
 
 
 @dataclass
@@ -99,7 +103,6 @@ class Monitor:
 
         gtfs_rt_feed = fetch_gtfs_rt_feed()
         peka_rt_feed = fetch_peka_vm_feed(stop)
-        print(peka_rt_feed)
         for trip in self._lookup.trips.values():
 
             if trip.route_id != route.id:

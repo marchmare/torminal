@@ -5,6 +5,9 @@ from enum import IntEnum, StrEnum
 from typing import Literal, TypeVar, Self, ClassVar, Generic, Any
 from abc import ABC, abstractmethod
 from bs4 import BeautifulSoup
+from datetime import datetime, date, time
+
+from torminal.gtfs.time import iso_to_dt, gtfs_date_to_dt, gtfs_time_to_dt, timestamp_to_dt
 
 
 class Model(ABC):
@@ -86,8 +89,8 @@ class Position:
 class BollardMessage:
     """Message displayed on a stop bollard."""
 
-    start_date: str
-    end_date: str
+    start_date: datetime
+    end_date: datetime
     link: str
     message: str
 
@@ -96,7 +99,13 @@ class BollardMessage:
         soup = BeautifulSoup(row["content"], "html.parser")
         link = soup.find("a")["href"].strip() if soup.find("a") else None
         text = soup.get_text(" ", strip=True)
-        return cls(start_date=row["startDate"], end_date=row["endDate"], link=link, message=text)
+
+        return cls(
+            start_date=iso_to_dt(row["startDate"]),
+            end_date=iso_to_dt(row["endDate"]),
+            link=link,
+            message=text,
+        )
 
 
 @dataclass
@@ -160,10 +169,10 @@ class GTFSArchive:
     """Metadata of GTFS archive listed on https://www.ztm.poznan.pl/otwarte-dane/gtfsfiles/"""
 
     def __init__(self, filename: str, modified: str) -> None:
-        self.filename = filename
-        self.start_date = filename.split("_")[0]
-        self.end_date = filename.split("_")[1].split(".")[0]
-        self.modified = modified
+        self.filename: str = filename
+        self.start_date: date = gtfs_date_to_dt(filename.split("_")[0])
+        self.end_date: date = gtfs_date_to_dt(filename.split("_")[1].split(".")[0])
+        self.modified: str = modified
 
 
 class Direction(IntEnum):
@@ -213,8 +222,8 @@ class FeedInfo:
     publisher_name: str
     publisher_url: str
     language: str
-    start_date: str
-    end_date: str
+    start_date: date
+    end_date: date
 
     @classmethod
     def from_dict(cls, row: dict[str, str]) -> Self:
@@ -222,8 +231,8 @@ class FeedInfo:
             publisher_name=row["feed_publisher_name"],
             publisher_url=row["feed_publisher_url"],
             language=row["feed_lang"],
-            start_date=row["feed_start_date"],
-            end_date=row["feed_end_date"],
+            start_date=gtfs_date_to_dt(row["feed_start_date"]),
+            end_date=gtfs_date_to_dt(row["feed_end_date"]),
         )
 
 
@@ -356,8 +365,8 @@ class StopTime(Model):
     _key = "stop_sequence"
 
     sequence: int
-    arrival_time: str  # custom GTFS time format
-    departure_time: str  # custom GTFS time format
+    arrival_time: time
+    departure_time: time
     stop_id: str
     pickup_type: DropoffPickupType
     drop_off_type: DropoffPickupType
@@ -366,8 +375,8 @@ class StopTime(Model):
     def from_dict(cls, row: dict[str, str]) -> Self:
         return cls(
             sequence=int(row["stop_sequence"]),
-            arrival_time=row["arrival_time"],
-            departure_time=row["departure_time"],
+            arrival_time=gtfs_time_to_dt(row["arrival_time"]),
+            departure_time=gtfs_time_to_dt(row["departure_time"]),
             stop_id=row["stop_id"],
             pickup_type=DropoffPickupType(int(row["pickup_type"])),
             drop_off_type=DropoffPickupType(int(row["drop_off_type"])),
@@ -392,8 +401,8 @@ class ServiceCalendar(Model):
     friday: bool
     saturday: bool
     sunday: bool
-    start_date: str
-    end_date: str
+    start_date: date
+    end_date: date
 
     @classmethod
     def from_dict(cls, row: dict[str, str]) -> Self:
@@ -406,8 +415,8 @@ class ServiceCalendar(Model):
             friday=bool(int(row["friday"])),
             saturday=bool(int(row["saturday"])),
             sunday=bool(int(row["sunday"])),
-            start_date=row["start_date"],
-            end_date=row["end_date"],
+            start_date=gtfs_date_to_dt(row["start_date"]),
+            end_date=gtfs_date_to_dt(row["end_date"]),
         )
 
 
