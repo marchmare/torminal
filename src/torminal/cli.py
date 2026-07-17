@@ -1,6 +1,10 @@
 from torminal.gtfs.static import GTFSStaticLoader
 from torminal.query import Monitor, Query
-from torminal.tui.app import TORminal
+from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
+
+from collections import defaultdict
+
+# from torminal.tui.app import TORminal
 
 
 def app() -> None:
@@ -8,16 +12,33 @@ def app() -> None:
     # # app = TORminal()
     # app.run()
     loader = GTFSStaticLoader(print_update)
-    lookup = loader.load()
-    print(lookup.feed_info)
-    query = Query("NARA71", 214, 60)
-    monitor = Monitor(lookup)
+    dataset = loader.load()
+    print(dataset.feed_info)  # print feed_info to see if dataset applies for today's date
+    query = Query("NARA71", 10, 60)
+    monitor = Monitor(dataset)
 
     matches = monitor.resolve_query(query)
 
+    # group by stops:
+    matches_grouped = defaultdict(list)
     for match in matches:
-        result = monitor.poll(match)
-        print(result)
+        matches_grouped[match.stop.code].append(match)
+
+    # poll:
+    for stop, stop_matches in matches_grouped.items():
+        peka_vm_feed = fetch_peka_vm_feed(monitor.dataset.stops.get(stop))
+        rt_msg = peka_vm_feed
+
+        for match in stop_matches:
+            rt_gtfs = fetch_gtfs_rt_feed()
+
+            rt_tu, rt_vp = (
+                rt_gtfs.trip_updates.get(match.trip.id, None),
+                rt_gtfs.vehicle_positions.get(match.trip.id, None),
+            )
+
+            result = monitor.poll(match, rt_tu, rt_vp, rt_msg)
+            print(result)
 
 
 def print_update(progress):

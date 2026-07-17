@@ -14,6 +14,7 @@ Time formats across TORminal:
 from datetime import datetime, date, time, timedelta
 
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+fake_today = datetime(2026, 7, 17, 20, 0, 0)
 
 
 def timestamp_to_dt(timestamp: int) -> datetime:
@@ -57,13 +58,4 @@ def gtfs_time_to_dt(time: str) -> time:
 
 def combine_today(time: time) -> datetime:
     """Combine time object with today datetime."""
-
     return datetime.combine(date.today(), time)
-
-
-def check_arrival_within_window(arrival_time: time, time_window: int) -> bool:
-    """Calculate if arrival time for trip stop event will occur within a time period specified by `minutes` argument, counted from current time."""
-
-    time_start = datetime.now()
-    time_end = time_start + timedelta(minutes=time_window)
-    return time_start < combine_today(arrival_time) < time_end

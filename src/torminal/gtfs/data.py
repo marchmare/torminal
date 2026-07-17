@@ -7,7 +7,7 @@ from abc import ABC, abstractmethod
 from bs4 import BeautifulSoup
 from datetime import datetime, date, time
 
-from torminal.gtfs.time import iso_to_dt, gtfs_date_to_dt, gtfs_time_to_dt, timestamp_to_dt
+from torminal.gtfs.time import iso_to_dt, gtfs_date_to_dt, gtfs_time_to_dt
 
 
 class Model(ABC):
@@ -459,17 +459,19 @@ class TripStops(GroupModel[StopTime]):
 
 
 class VehicleStatus(IntEnum):
-    RUNNING = 0
+    ON_TIME = 0
     """Going according to plan"""
-    DELAYED = 1
-    """Delay exceeding tolerance, but otherwise moving along typical path"""
-    RUSHED = 2
+    SLIGHTLY_DELAYED = 1
+    """1-3 minutes of delay, but otherwise moving along typical path"""
+    DELAYED = 2
+    """Delay exceeding 3 minutes, but otherwise moving along typical path"""
+    EARLY = 3
     """Negative delay exceeding tolerance, but otherwise moving along typical path"""
-    DETOURED = 3
+    DETOURED = 4
     """Vehicle outside of defined path"""
-    STUCK = 4
+    STUCK = 5
     """Vehicle not moving for extended time"""
-    AT_TERMINUS = 5
+    AT_TERMINUS = 6
     """Vehicle is waiting to begin its trip"""
-    NO_RT = 6
+    NO_RT = 7
     """There's no RT data available for this trip"""
