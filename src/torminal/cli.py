@@ -14,7 +14,7 @@ def app() -> None:
     loader = GTFSStaticLoader(print_update)
     dataset = loader.load()
     print(dataset.feed_info)  # print feed_info to see if dataset applies for today's date
-    query = Query("NARA71", 10, 60)
+    query = Query("NARA71", 10)
     monitor = Monitor(dataset)
 
     matches = monitor.resolve_query(query)
@@ -26,8 +26,7 @@ def app() -> None:
 
     # poll:
     for stop, stop_matches in matches_grouped.items():
-        peka_vm_feed = fetch_peka_vm_feed(monitor.dataset.stops.get(stop))
-        rt_msg = peka_vm_feed
+        rt_msg = fetch_peka_vm_feed(monitor.dataset.stops.get(stop))
 
         for match in stop_matches:
             rt_gtfs = fetch_gtfs_rt_feed()

@@ -5,7 +5,7 @@ from enum import IntEnum, StrEnum
 from typing import Literal, TypeVar, Self, ClassVar, Generic, Any
 from abc import ABC, abstractmethod
 from bs4 import BeautifulSoup
-from datetime import datetime, date, time
+from datetime import datetime, date, time, UTC
 
 from torminal.gtfs.time import iso_to_dt, gtfs_date_to_dt, gtfs_time_to_dt
 
@@ -95,9 +95,14 @@ class BollardMessage(Model):
     message: str
 
     @classmethod
-    def from_dict(cls, row: str) -> Self:
+    def from_dict(cls, row: dict[str, Any]) -> Self:  # type: ignore [override]
         soup = BeautifulSoup(row["content"], "html.parser")
-        link = soup.find("a")["href"].strip() if soup.find("a") else None
+
+        link_tag = soup.find("a")
+        link = None
+        if link_tag and hasattr(link_tag, "get"):
+            link = link_tag.get("href")
+
         text = soup.get_text(" ", strip=True)
 
         return cls(
@@ -117,16 +122,17 @@ class BollardMessages(GroupModel[BollardMessage]):
     items: list[BollardMessage] = field(default_factory=list)
 
     @classmethod
-    def from_dict(cls, items: dict[str, dict[Any, Any]]) -> Self:
+    def from_dict(cls, items: dict[str, dict[str, Any]]) -> Self:  # type: ignore [override]
         return cls(items=[BollardMessage.from_dict(item) for item in items])
 
-    def get_current(self) -> BollardMessage:
+    def get_current(self) -> BollardMessage | None:
         """Get the bollard info that applies in the most recent time period and includes today's date."""
-        # sort by start day, from latest to earliest
-        # pick the first that includes todays date
 
-        # sorted_items = sorted(self.items, key=lambda item: item.start_date)
-        return self.items[0]
+        sorted_items = sorted(self.items, key=lambda item: item.start_date)  # TODO: verify if sorting works
+        for item in sorted_items:
+            if item.start_date <= datetime.now(UTC):
+                return item
+        return None
 
 
 ### GTFS static data:

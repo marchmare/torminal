@@ -25,22 +25,28 @@ from torminal.gtfs.data import (
 class Query:
     """Class representing a single stop-line query to get resolved."""
 
-    def __init__(self, stop_code: str, route_id: str | int, time_window: int) -> None:
+    def __init__(self, stop_code: str, route_id: str | int) -> None:
         self.stop_code = str(stop_code)
         self.route_id = str(route_id)
-        self.time_window = time_window
 
     @classmethod
-    def from_input(cls, stop_input: str, route_intput: str) -> Self:
+    def from_input(cls, stop_input: str, route_intput: str) -> Self | None:
         """
         Return a Query based on user input. Following syntax of the input is assumed:
 
             * stop input: ' (CODE123) Stop Name  '
             * route input: '  123 Route direction - Route direction  ' (allows routes like T6)
         """
+        re_stop_code = re.search(r"^\s*\(([^)]+)\)", stop_input)
+        if not re_stop_code:
+            return None
+        stop_code = re_stop_code.group(1)
 
-        stop_code = re.search(r"^\s*\(([^)]+)\)", stop_input).group(1)
-        route_id = re.search(r"^\s*([A-Za-z]?\d+)", route_intput).group(1)
+        re_route_id = re.search(r"^\s*([A-Za-z]?\d+)", route_intput)
+        if not re_route_id:
+            return None
+        route_id = re_route_id.group(1)
+
         return cls(stop_code, route_id)
 
 
@@ -67,11 +73,11 @@ class RealtimePollResult:
     """Class representing data obtained from realtime feeds."""
 
     planned_arrival: ArrivalTime
-    realtime_arrival: ArrivalTime
+    realtime_arrival: ArrivalTime | None
     status: VehicleStatus = VehicleStatus.NO_RT
     message: BollardMessage | None = None
     position: Position | None = None
-    vehicle: int | None = None
+    vehicle: str | None = None
     current_stop: int | None = None
 
 
@@ -85,12 +91,15 @@ class Monitor:
     def resolve_query(self, query: Query) -> list[QueryMatch]:
         """Find matching trips for the Query."""
 
-        matches = []
+        matches: list[QueryMatch] = []
 
         # determine stop and route data from lookup, resolve calendar
         stop = self.dataset.stops.get(query.stop_code, None)
         route = self.dataset.routes.get(query.route_id, None)
         service = resolve_service_calendar(self.dataset)
+
+        if not stop or not route or not service:
+            return matches
 
         for trip in self.dataset.trips.values():
 
@@ -151,7 +160,9 @@ class Monitor:
 
         def is_vehicle_incoming_at(rt_vehicle_pos: VehiclePosition | None) -> bool:
             """Check if vehicle has `current_status` present and set to `INCOMING_AT`, meaning the vehicle is at the terminus, waiting to begin a trip."""
-            return rt_vehicle_pos.current_status == 0 if hasattr(rt_vehicle_pos, "current_status") else False
+            if not rt_vehicle_pos:
+                return False
+            return rt_vehicle_pos.current_status == 0
 
         status = VehicleStatus.NO_RT
         delay = 0
@@ -184,13 +195,13 @@ class Monitor:
         query: QueryMatch,
         rt_trip_update: TripUpdate | None,
         rt_vehicle_pos: VehiclePosition | None,
-        rt_messages: PEKARealTimeFeed,
+        rt_messages: PEKARealTimeFeed | None,
     ) -> RealtimePollResult:
         """Find upcoming arrivals for the query, that will occur within specified time window."""
 
         print(f"Polling {query.stop.id} {query.route.id}")
 
-        timestamp = datetime.timestamp(datetime.now())
+        timestamp = int(datetime.timestamp(datetime.now()))
         history_entry = (timestamp, None, None)
         message = None
         position = None
@@ -214,7 +225,8 @@ class Monitor:
             realtime_arrival = self.calculate_rt_arrival_time(query, rt_trip_update)
 
         # get data from PEKA virtual monitor
-        message = BollardMessages.from_dict(rt_messages.message).get_current()
+        if rt_messages:
+            message = BollardMessages.from_dict(rt_messages.message).get_current()
 
         status = self.determine_status(query, rt_trip_update, rt_vehicle_pos)
         query.position_history.append(history_entry)

@@ -49,8 +49,11 @@ def fetch_gtfs_rt_feed() -> GTFSRealTimeFeed:
     )
 
 
-def fetch_peka_vm_feed(stop: Stop) -> PEKARealTimeFeed:
+def fetch_peka_vm_feed(stop: Stop | None) -> PEKARealTimeFeed | None:
     """Request feed from PEKA virtual monitor for specified stop."""
+    if not stop:
+        return None
+
     _times = fetch_form_post(PEKA_VM_URL, method="getTimes", params={"symbol": stop.code})
     """Returns list of upcoming departures from the stop"""
 
