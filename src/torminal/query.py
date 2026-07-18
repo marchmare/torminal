@@ -7,7 +7,7 @@ from shapely.geometry import Point
 import re
 
 from torminal.config import config
-from torminal.gtfs.gps import gps_point
+from torminal.gtfs.gps import gps_point, check_point_on_shape, calculate_mean_velocity
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.gtfs.realtime import PEKARealTimeFeed
 from torminal.gtfs.utils import resolve_service_calendar, ArrivalTime
@@ -17,6 +17,7 @@ from torminal.gtfs.data import (
     Route,
     Vehicle,
     Trip,
+    Shape,
     BollardMessages,
     BollardMessage,
     ServiceCalendar,
@@ -65,6 +66,7 @@ class QueryMatch:
     stop_time: StopTime
     stop: Stop
     route: Route
+    shape: Shape
     service: ServiceCalendar
     planned_arrival: datetime
 
@@ -72,6 +74,7 @@ class QueryMatch:
     # data that is static during the entire trip but requires initial RT data access
     vehicle: Vehicle | None = None
     position_history: list[tuple[int, int | None, Point | None]] = field(default_factory=list)
+    velocity_history: list[tuple[int, float | None]] = field(default_factory=list)
 
     def to_config(self) -> list[str, str]:
         """Convert to [stop_code, route_id] list, for use with config"""
@@ -88,6 +91,7 @@ class RealtimePollResult:
     message: BollardMessage | None = None
     position: Point | None = None
     vehicle: str | None = None
+    velocity: float | None = None
     current_stop: int | None = None
 
 
@@ -150,12 +154,14 @@ class Monitor:
                 if not stop.id == stop_time.stop_id or not self.check_arrival_within_window(stop_time.arrival_time):
                     continue
 
+                shape = self.dataset.shapes.get(trip.shape_id, None)
                 matches.append(
                     QueryMatch(
                         trip=trip,
                         stop_time=stop_time,
                         stop=stop,
                         route=route,
+                        shape=shape,
                         service=service,
                         planned_arrival=stop_time.arrival_time,
                     )
@@ -204,6 +210,14 @@ class Monitor:
                 return False
             return rt_vehicle_pos.current_status == 0
 
+        def is_vehicle_stuck(query: QueryMatch, window: int = 10, threshold: float = 0.5) -> bool:
+            """
+            Check if vehicle's recent average velocity is near 0 for prolonged time.
+            TODO: adjust this check after periodic timer is implemented for polling
+            """
+            recent = [velocity for _, velocity in query.velocity_history[-window:] if velocity is not None]
+            return len(recent) >= window and (sum(recent) / len(recent)) < threshold
+
         status = VehicleStatus.NO_RT
         delay = 0
 
@@ -226,9 +240,11 @@ class Monitor:
                 else:
                     status = VehicleStatus.ON_TIME
 
-        # dependent on position history
-        # TODO: determine DETOURED - check if last sequence change ocurred at position defined in Stop
-        # TODO: determine STUCK - check if position of last n updates didn't change much
+                position = gps_point(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
+                if not check_point_on_shape(position, query.shape):
+                    return VehicleStatus.DETOURED
+                if is_vehicle_stuck(query):
+                    return VehicleStatus.STUCK
 
         return status
 
@@ -245,6 +261,8 @@ class Monitor:
 
         timestamp = int(datetime.timestamp(datetime.now()))
         history_entry = (timestamp, None, None)
+        velocity_entry = (timestamp, None)
+        velocity = None
         message = None
         position = None
         realtime_arrival = None
@@ -256,6 +274,10 @@ class Monitor:
             position = gps_point(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
             current_stop = rt_vehicle_pos.current_stop_sequence
             history_entry = (timestamp, current_stop, position)
+            velocity = calculate_mean_velocity(query.position_history[-5:])
+
+            if velocity is not None:
+                velocity_entry = (timestamp, velocity)
 
         # get data related to trip_update GTFS-RT feed
         if rt_trip_update:
@@ -272,6 +294,7 @@ class Monitor:
 
         status = self.determine_status(query, rt_trip_update, rt_vehicle_pos)
         query.position_history.append(history_entry)
+        query.velocity_history.append(velocity_entry)
 
         return RealtimePollResult(
             message=message,
@@ -280,5 +303,6 @@ class Monitor:
             realtime_arrival=realtime_arrival,
             current_stop=current_stop,
             status=status,
+            velocity=velocity,
             vehicle=query.vehicle.id if query.vehicle else None,
         )

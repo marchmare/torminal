@@ -18,6 +18,7 @@ async def main() -> None:
 
         monitor.add_query(Query("NARA71", "10"))
         monitor.add_query(Query("NARA71", "3"))
+        monitor.add_query(Query("NARA71", "214"))
 
         # get peka feeds in parallel
         peka_tasks = {stop: fetch_peka_vm_feed(monitor.dataset.stops.get(stop)) for stop in monitor.matched_queries}
