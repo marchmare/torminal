@@ -1,11 +1,13 @@
-from google.transit.gtfs_realtime_pb2 import TripUpdate, Position, VehiclePosition
+from google.transit.gtfs_realtime_pb2 import TripUpdate, VehiclePosition
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Self
 from collections import defaultdict
+from shapely.geometry import Point
 import re
 
 from torminal.config import config
+from torminal.gtfs.gps import gps_point
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.gtfs.realtime import PEKARealTimeFeed
 from torminal.gtfs.utils import resolve_service_calendar, ArrivalTime
@@ -15,7 +17,6 @@ from torminal.gtfs.data import (
     Route,
     Vehicle,
     Trip,
-    Position,
     BollardMessages,
     BollardMessage,
     ServiceCalendar,
@@ -70,7 +71,7 @@ class QueryMatch:
     # below data can be obtained during first poll for RT data
     # data that is static during the entire trip but requires initial RT data access
     vehicle: Vehicle | None = None
-    position_history: list[tuple[int, int | None, Position | None]] = field(default_factory=list)
+    position_history: list[tuple[int, int | None, Point | None]] = field(default_factory=list)
 
     def to_config(self) -> list[str, str]:
         """Convert to [stop_code, route_id] list, for use with config"""
@@ -85,7 +86,7 @@ class RealtimePollResult:
     realtime_arrival: ArrivalTime | None
     status: VehicleStatus = VehicleStatus.NO_RT
     message: BollardMessage | None = None
-    position: Position | None = None
+    position: Point | None = None
     vehicle: str | None = None
     current_stop: int | None = None
 
@@ -250,7 +251,7 @@ class Monitor:
 
         # get data related to vehicle position GTFS-RT feed
         if rt_vehicle_pos:
-            position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
+            position = gps_point(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
             current_stop = rt_vehicle_pos.current_stop_sequence
             history_entry = (timestamp, current_stop, position)
 
