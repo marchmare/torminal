@@ -90,7 +90,7 @@ class GTFSStaticLoader:
 
         vehicles, trips, trip_stops, routes, stops, shapes, service_calendars, feed_info = results
 
-        await self.track(build_all_polygons(shapes), "Built trip shape polygons")
+        await self.track(asyncio.to_thread(build_all_polygons, shapes), "Built trip shape polygons")
 
         gtfs_static_lookup = GTFSStaticFeed(
             vehicles=vehicles,
@@ -109,7 +109,7 @@ M = TypeVar("M", bound=Model)
 G = TypeVar("G", bound=GroupModel)
 
 
-async def build_all_polygons(shapes: dict[str, Shape]) -> None:
+def build_all_polygons(shapes: dict[str, Shape]) -> None:
     """Build and assign polygon for a Shape from its items."""
     for shape in shapes.values():
         shape.polygon = shape_to_polygon(shape.items)

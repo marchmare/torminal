@@ -3,6 +3,11 @@ LoadingScreen {
     background: $background 60%;
 }
 
+Spinner {
+    content-align: center middle;
+    color: $panel-lighten-3;
+}
+
 .box {
     width: 60;
     height: auto;
