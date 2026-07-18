@@ -2,8 +2,10 @@ from google.transit.gtfs_realtime_pb2 import TripUpdate, Position, VehiclePositi
 from datetime import datetime, timedelta, time
 from dataclasses import dataclass, field
 from typing import Self
+from collections import defaultdict
 import re
 
+from torminal.config import config
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.gtfs.realtime import PEKARealTimeFeed
 from torminal.gtfs.utils import resolve_service_calendar, ArrivalTime
@@ -28,6 +30,10 @@ class Query:
     def __init__(self, stop_code: str, route_id: str | int) -> None:
         self.stop_code = str(stop_code)
         self.route_id = str(route_id)
+
+    def to_config(self) -> list[str, str]:
+        """Convert to [stop_code, route_id] list, for use with config"""
+        return [self.stop_code, self.route_id]
 
     @classmethod
     def from_input(cls, stop_input: str, route_intput: str) -> Self | None:
@@ -67,6 +73,10 @@ class QueryMatch:
     vehicle: Vehicle | None = None
     position_history: list[tuple[int, int | None, Position | None]] = field(default_factory=list)
 
+    def to_config(self) -> list[str, str]:
+        """Convert to [stop_code, route_id] list, for use with config"""
+        return [self.stop.code, self.route.id]
+
 
 @dataclass
 class RealtimePollResult:
@@ -84,9 +94,36 @@ class RealtimePollResult:
 class Monitor:
     """Monitor performing query polls."""
 
-    def __init__(self, datset: GTFSStaticFeed, time_window: int = 30) -> None:
+    def __init__(self, datset: GTFSStaticFeed) -> None:
         self.dataset = datset
-        self.time_window = time_window
+        self.time_window = config.time_window
+        self.matched_queries: dict[str, list[QueryMatch]] = defaultdict(list)
+
+    def add_query(self, query: Query) -> None:
+        """Add query operation - adds query to config if it yields matches, returns resolved QueryMatches"""
+
+        matches = self.resolve_query(query)
+        if not matches:
+            return
+
+        config.add_query(query.to_config())
+
+        for match in matches:
+            self.matched_queries[match.stop.code].append(match)
+
+    def remove_query(self, query: Query) -> None:
+        """Remove query operation - removes query from config"""
+
+        config.remove_query(query.to_config())
+
+        if query.stop_code in self.matched_queries:
+
+            self.matched_queries[query.stop_code] = [
+                match for match in self.matched_queries[query.stop_code] if match.route.id != query.route_id
+            ]
+
+            if not self.matched_queries[query.stop_code]:
+                del self.matched_queries[query.stop_code]
 
     def resolve_query(self, query: Query) -> list[QueryMatch]:
         """Find matching trips for the Query."""
@@ -112,6 +149,7 @@ class Monitor:
                 # filter out stop times with not matching stops and outside time window
                 if not stop.id == stop_time.stop_id or not self.check_arrival_within_window(stop_time.arrival_time):
                     continue
+
                 matches.append(
                     QueryMatch(
                         trip=trip,
@@ -140,10 +178,13 @@ class Monitor:
         time_end = time_start + timedelta(minutes=self.time_window)
         return time_start < combine_today(arrival_time) < time_end
 
-    def calculate_rt_arrival_time(self, query: QueryMatch, rt_trip_update: TripUpdate) -> ArrivalTime:
+    def calculate_rt_arrival_time(self, query: QueryMatch, rt_trip_update: TripUpdate) -> ArrivalTime | None:
         """Calculate estimated arrival based on delay obtained from realtime feed."""
 
         stop_time_update = self.resolve_closest_stop(query.stop_time.sequence, rt_trip_update.stop_time_update)
+        if not stop_time_update:
+            return None
+
         summed_delay_dt = combine_today(query.planned_arrival) + timedelta(
             seconds=stop_time_update.arrival.delay if stop_time_update else 0
         )
