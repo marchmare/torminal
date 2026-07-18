@@ -1,8 +1,8 @@
-from google.transit.gtfs_realtime_pb2 import TripUpdate
+from datetime import datetime, time
+
 from torminal.gtfs.data import ServiceCalendar
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.gtfs.time import combine_today, weekday_names
-from datetime import datetime, time
 
 
 class ArrivalTime:

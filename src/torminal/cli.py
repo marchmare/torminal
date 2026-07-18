@@ -1,21 +1,18 @@
+from collections import defaultdict
+
 from torminal.gtfs.static import GTFSStaticLoader
 from torminal.query import Monitor, Query
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
-
-from collections import defaultdict
-
-# from torminal.tui.app import TORminal
+from datetime import datetime
 
 
 def app() -> None:
     print("🚋 TORminal")
-    # # app = TORminal()
-    # app.run()
     loader = GTFSStaticLoader(print_update)
     dataset = loader.load()
     print(dataset.feed_info)  # print feed_info to see if dataset applies for today's date
     query = Query("NARA71", 10)
-    monitor = Monitor(dataset)
+    monitor = Monitor(dataset, 60)
 
     matches = monitor.resolve_query(query)
 

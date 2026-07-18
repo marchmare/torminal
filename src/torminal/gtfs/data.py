@@ -128,9 +128,9 @@ class BollardMessages(GroupModel[BollardMessage]):
     def get_current(self) -> BollardMessage | None:
         """Get the bollard info that applies in the most recent time period and includes today's date."""
 
-        sorted_items = sorted(self.items, key=lambda item: item.start_date)  # TODO: verify if sorting works
+        sorted_items = sorted(self.items, key=lambda item: item.start_date, reverse=True)
         for item in sorted_items:
-            if item.start_date <= datetime.now(UTC):
+            if item.start_date <= datetime.now(UTC) <= item.end_date:
                 return item
         return None
 
