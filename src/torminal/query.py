@@ -209,6 +209,8 @@ class Monitor:
 
         if rt_trip_update:
             stop_time_update = self.resolve_closest_stop(query.stop_time.sequence, rt_trip_update.stop_time_update)
+            if not stop_time_update:
+                return status
             delay = stop_time_update.arrival.delay
 
         if rt_vehicle_pos:

@@ -7,6 +7,7 @@ from csv import DictReader
 from zipfile import ZipFile
 from io import TextIOWrapper
 
+from torminal.gtfs.gps import shape_to_polygon
 from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
 from torminal.gtfs.data import (
     Trip,
@@ -52,7 +53,7 @@ class GTFSStaticLoader:
     def __init__(self, progress_callback: Callable[[ProgressEvent], None]) -> None:
         self.callback: Callable[[ProgressEvent], None] = progress_callback
         self.current = 0
-        self.total: int = 10
+        self.total: int = 11
 
     def emit_progress(self, message: str) -> None:
         """Execute callback function with ProgressEvent"""
@@ -89,6 +90,8 @@ class GTFSStaticLoader:
 
         vehicles, trips, trip_stops, routes, stops, shapes, service_calendars, feed_info = results
 
+        await self.track(build_all_polygons(shapes), "Built trip shape polygons")
+
         gtfs_static_lookup = GTFSStaticFeed(
             vehicles=vehicles,
             trips=trips,
@@ -104,6 +107,12 @@ class GTFSStaticLoader:
 
 M = TypeVar("M", bound=Model)
 G = TypeVar("G", bound=GroupModel)
+
+
+async def build_all_polygons(shapes: dict[str, Shape]) -> None:
+    """Build and assign polygon for a Shape from its items."""
+    for shape in shapes.values():
+        shape.polygon = shape_to_polygon(shape.items)
 
 
 def parse_txt_as_dict(model: type[M], z: ZipFile) -> dict[str, M]:

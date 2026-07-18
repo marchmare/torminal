@@ -40,15 +40,10 @@ def shape_to_polygon(shape_points: list[ShapePoint]) -> Polygon:
     return Polygon([item.point for item in ordered_list])
 
 
-def check_point_on_shape(point: Point, shape: Shape | Polygon, radius: int = 50) -> bool:
+def check_point_on_shape(point: Point, shape: Shape, radius: int = 50) -> bool:
     """Check if point is in close proximity of the polygon defined by Shape."""
 
-    if isinstance(shape, Shape):
-        polygon = shape_to_polygon(shape.items)
-    else:
-        polygon = shape
-
-    buffered_polygon = polygon.buffer(radius)
+    buffered_polygon = shape.polygon.buffer(radius)
     return buffered_polygon.contains(point)
 
 

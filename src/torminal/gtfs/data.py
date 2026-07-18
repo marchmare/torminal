@@ -6,8 +6,7 @@ from typing import Literal, TypeVar, Self, ClassVar, Generic, Any
 from abc import ABC, abstractmethod
 from bs4 import BeautifulSoup
 from datetime import datetime, date, UTC
-
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 
 from torminal.gtfs.time import iso_to_dt, gtfs_date_to_dt, gtfs_time_to_dt
 from torminal.gtfs.gps import gps_point
@@ -428,6 +427,7 @@ class Shape(GroupModel[ShapePoint]):
 
     id: str
     items: list[ShapePoint] = field(default_factory=list)
+    polygon: Polygon = field(default_factory=Polygon)
 
     @classmethod
     def from_dict(cls, row: dict[str, str]) -> Self:
