@@ -1,5 +1,6 @@
 """Module for handling GTFS realtime data"""
 
+import asyncio
 from dataclasses import dataclass
 from google.transit.gtfs_realtime_pb2 import TripUpdate, VehiclePosition
 
@@ -38,10 +39,12 @@ class PEKARealTimeFeed:
     message: dict[str, dict]
 
 
-def fetch_gtfs_rt_feed() -> GTFSRealTimeFeed:
+async def fetch_gtfs_rt_feed() -> GTFSRealTimeFeed:
     """Request GTFS realtime feed and return GTFSRealTimeFeed object for it."""
-    _gtfs_rt_trip_updates = fetch_protobuf(GTFS_RT_TRIP_UPDATES_URL)
-    _gtfs_rt_vehicle_positions = fetch_protobuf(GTFS_RT_VEHICLE_POSITIONS_URL)
+    _gtfs_rt_trip_updates, _gtfs_rt_vehicle_positions = await asyncio.gather(
+        fetch_protobuf(GTFS_RT_TRIP_UPDATES_URL),
+        fetch_protobuf(GTFS_RT_VEHICLE_POSITIONS_URL),
+    )
 
     return GTFSRealTimeFeed(
         trip_updates={e.trip_update.trip.trip_id: e.trip_update for e in _gtfs_rt_trip_updates},
@@ -49,17 +52,19 @@ def fetch_gtfs_rt_feed() -> GTFSRealTimeFeed:
     )
 
 
-def fetch_peka_vm_feed(stop: Stop | None) -> PEKARealTimeFeed | None:
+async def fetch_peka_vm_feed(stop: Stop | None) -> PEKARealTimeFeed | None:
     """Request feed from PEKA virtual monitor for specified stop."""
     if not stop:
         return None
 
-    _times = fetch_form_post(PEKA_VM_URL, method="getTimes", params={"symbol": stop.code})
-    """Returns list of upcoming departures from the stop"""
+    _times, _bollard_msg = await asyncio.gather(
+        fetch_form_post(PEKA_VM_URL, method="getTimes", params={"symbol": stop.code}),
+        fetch_form_post(PEKA_VM_URL, method="findMessagesForBollard", params={"symbol": stop.code}),
+    )
+    """_times - list of upcoming departures from the stop"""
+    """_bollard_msg - messages currently displayed on a bollard from specified stop."""
 
-    _bollard_msg = fetch_form_post(PEKA_VM_URL, method="findMessagesForBollard", params={"symbol": stop.code})
-    """Returns message currently displayed on a bollard from specified stop."""
-
+    # for potential future use:
     # _bollards_by_stop_point = fetch_form_post(
     #     PEKA_VM_URL, method="getBollardsByStopPoint", params={"symbol": stop.name}
     # )

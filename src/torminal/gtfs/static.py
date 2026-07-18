@@ -1,11 +1,13 @@
 import csv
+import asyncio
+from collections.abc import Awaitable
 from typing import Callable, TypeVar
 from dataclasses import dataclass
 from csv import DictReader
 from zipfile import ZipFile
 from io import TextIOWrapper
 
-from torminal.requests import open_gtfs_zip, open_vehicle_dictionary
+from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
 from torminal.gtfs.data import (
     Trip,
     Route,
@@ -50,67 +52,54 @@ class GTFSStaticLoader:
     def __init__(self, progress_callback: Callable[[ProgressEvent], None]) -> None:
         self.callback: Callable[[ProgressEvent], None] = progress_callback
         self.current = 0
-        self.total: int = 9
+        self.total: int = 10
 
-    def _emit_progress(self, message: str) -> None:
+    def emit_progress(self, message: str) -> None:
         """Execute callback function with ProgressEvent"""
         self.callback(ProgressEvent(current=self.current, total=self.total, message=message))
 
-    def _step(self) -> None:
-        """Update current counter by 1"""
+    async def track(self, task: Awaitable, message: str):
+        """Track progress of an awaitable task."""
+        result = await task
         self.current += 1
+        self.emit_progress(message)
+        return result
 
-    def load(self) -> GTFSStaticFeed:
+    async def load(self) -> GTFSStaticFeed:
         """Load GTFS static data."""
-        self._emit_progress("Loading vehicle_dictionary.csv")
-        with open_vehicle_dictionary() as vd:
-            vehicles = parse_vehicle_dictionary(vd)
-        self._step()
 
-        self._emit_progress("Loading GTFS archive")
-        with open_gtfs_zip() as z:
-            self._step()
+        # fetch static data sources
+        await asyncio.gather(
+            self.track(fetch_vehicle_dictionary(), "Downloaded vehicle_dictionary.csv"),
+            self.track(fetch_gtfs_zip(), "Downloaded GTFS archive"),
+        )
 
-            self._emit_progress("Loading trips.txt")
-            trips = parse_txt_as_dict(Trip, z)
-            self._step()
-
-            self._emit_progress("Loading trip_stops.txt")
-            trip_stops = parse_txt_as_dict_grouped(TripStops, z)
-            self._step()
-
-            self._emit_progress("Loading routes.txt")
-            routes = parse_txt_as_dict(Route, z)
-            self._step()
-
-            self._emit_progress("Loading stops.txt")
-            stops = parse_txt_as_dict(Stop, z)
-            self._step()
-
-            self._emit_progress("Loading shapes.txt")
-            shapes = parse_txt_as_dict_grouped(Shape, z)
-            self._step()
-
-            self._emit_progress("Loading service.txt")
-            service_calendars = parse_txt_as_dict(ServiceCalendar, z)
-            self._step()
-
-            self._emit_progress("Loading feed_info.txt")
-            feed_info = parse_feed_info(z)
-            self._step()
-
-            gtfs_static_lookup = GTFSStaticFeed(
-                vehicles=vehicles,
-                trips=trips,
-                trip_stops=trip_stops,
-                routes=routes,
-                stops=stops,
-                shapes=shapes,
-                service_calendars=service_calendars,
-                feed_info=feed_info,
+        # parse into dataset
+        with open_vehicle_dictionary() as vd, open_gtfs_zip() as z:
+            results = await asyncio.gather(
+                self.track(asyncio.to_thread(parse_vehicle_dictionary, vd), "Parsed vehicle_dictionary.csv"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Trip, z), "Parsed trips.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, TripStops, z), "Parsed trip_stops.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Route, z), "Parsed routes.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Stop, z), "Parsed stops.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, Shape, z), "Parsed shapes.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, ServiceCalendar, z), "Parsed service.txt"),
+                self.track(asyncio.to_thread(parse_feed_info, z), "Parsed feed_info.txt"),
             )
-            self._emit_progress("Finished")
-            return gtfs_static_lookup
+
+        vehicles, trips, trip_stops, routes, stops, shapes, service_calendars, feed_info = results
+
+        gtfs_static_lookup = GTFSStaticFeed(
+            vehicles=vehicles,
+            trips=trips,
+            trip_stops=trip_stops,
+            routes=routes,
+            stops=stops,
+            shapes=shapes,
+            service_calendars=service_calendars,
+            feed_info=feed_info,
+        )
+        return gtfs_static_lookup
 
 
 M = TypeVar("M", bound=Model)
