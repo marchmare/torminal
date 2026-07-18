@@ -11,9 +11,10 @@ Time formats across TORminal:
     * stop_times time: 20:34:00
 """
 
-from datetime import datetime, date, time, timedelta
+from datetime import datetime, date, time, timezone
 
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+fake_today = datetime(2026, 7, 17, 20, 0, 0)
 
 
 def timestamp_to_dt(timestamp: int) -> datetime:
@@ -22,7 +23,7 @@ def timestamp_to_dt(timestamp: int) -> datetime:
     In GTFS-RT terms its `uint64 timestamp`.
     """
 
-    return datetime.fromtimestamp(timestamp, tz="UTC")
+    return datetime.fromtimestamp(timestamp, tz=timezone.utc)
 
 
 def iso_to_dt(date: str) -> datetime:
@@ -49,21 +50,12 @@ def gtfs_time_to_dt(time: str) -> time:
     _time = time.split(":")
     hours = int(_time[0])
     if hours > 23:
-        hours = f"{hours - 24:02d}"
-    _new_time = f"{hours}:{_time[1]}:{_time[2]}"
+        hours -= 24
+    _new_time = f"{hours:02d}:{_time[1]}:{_time[2]}"
 
     return datetime.strptime(_new_time, "%H:%M:%S").time()
 
 
 def combine_today(time: time) -> datetime:
     """Combine time object with today datetime."""
-
     return datetime.combine(date.today(), time)
-
-
-def check_arrival_within_window(arrival_time: time, time_window: int) -> bool:
-    """Calculate if arrival time for trip stop event will occur within a time period specified by `minutes` argument, counted from current time."""
-
-    time_start = datetime.now()
-    time_end = time_start + timedelta(minutes=time_window)
-    return time_start < combine_today(arrival_time) < time_end

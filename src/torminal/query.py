@@ -1,148 +1,242 @@
-from google.transit.gtfs_realtime_pb2 import TripUpdate, Position
-from datetime import datetime, timedelta, time, date
-from dataclasses import dataclass
-from typing import Any
+from google.transit.gtfs_realtime_pb2 import TripUpdate, Position, VehiclePosition
+from datetime import datetime, timedelta, time
+from dataclasses import dataclass, field
+from typing import Self
+import re
 
-from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
-from torminal.gtfs.utils import resolve_service_calendar, resolve_closest_stop
-from torminal.gtfs.time import check_arrival_within_window, combine_today
-from torminal.gtfs.data import StopTime, Stop, Route, Vehicle, Trip, Position, BollardMessages, BollardMessage
+from torminal.gtfs.static import GTFSStaticFeed
+from torminal.gtfs.realtime import PEKARealTimeFeed
+from torminal.gtfs.utils import resolve_service_calendar, ArrivalTime
+from torminal.gtfs.time import combine_today
+from torminal.gtfs.data import (
+    StopTime,
+    Stop,
+    Route,
+    Vehicle,
+    Trip,
+    Position,
+    BollardMessages,
+    BollardMessage,
+    ServiceCalendar,
+    VehicleStatus,
+)
 
 
 class Query:
-    """Class representing a single stop-line query added by user to monitor departures and wanted time window for upcoming arrivals."""
+    """Class representing a single stop-line query to get resolved."""
 
-    def __init__(self, stop_code: str | int, route_id: str | int, time_window: int) -> None:
+    def __init__(self, stop_code: str, route_id: str | int) -> None:
         self.stop_code = str(stop_code)
         self.route_id = str(route_id)
-        self.time_window = time_window
 
-    def __repr__(self) -> str:
-        return f"stop ID: {self.stop_code}, route ID: {self.route_id}, time window: {self.time_window} min"
+    @classmethod
+    def from_input(cls, stop_input: str, route_intput: str) -> Self | None:
+        """
+        Return a Query based on user input. Following syntax of the input is assumed:
 
+            * stop input: ' (CODE123) Stop Name  '
+            * route input: '  123 Route direction - Route direction  ' (allows routes like T6)
+        """
+        re_stop_code = re.search(r"^\s*\(([^)]+)\)", stop_input)
+        if not re_stop_code:
+            return None
+        stop_code = re_stop_code.group(1)
 
-class ArrivalTime:
-    """Class calculating planned and live arrival times"""
+        re_route_id = re.search(r"^\s*([A-Za-z]?\d+)", route_intput)
+        if not re_route_id:
+            return None
+        route_id = re_route_id.group(1)
 
-    planned: time
-    planned_eta: int
-    live: time | None
-    live_eta: int | None
-    delay: int
-
-    def __init__(
-        self, stop_time: StopTime, stop_time_update: TripUpdate.StopTimeUpdate | None, status: str | None
-    ) -> None:
-        self.planned = stop_time.arrival_time
-        self.planned_eta = self.estimate_arrival(stop_time.arrival_time)
-
-        self.live = None
-        self.live_eta = None
-        self.delay = 0
-        if stop_time_update:
-            arrival_live_time = combine_today(stop_time.arrival_time) + timedelta(
-                seconds=stop_time_update.arrival.delay
-            )
-            self.live = arrival_live_time.time() if status != "INCOMING_AT" else None
-            self.live_eta = self.estimate_arrival(self.live) if status != "INCOMING_AT" else None
-            self.delay = stop_time_update.arrival.delay
-
-    def __repr__(self) -> str:
-        fields = (
-            f"planned={self.planned!r}",
-            f"planned_eta={self.planned_eta!r}",
-            f"live={self.live!r}",
-            f"live_eta={self.live_eta!r}",
-            f"delay={self.delay!r}",
-        )
-        return f"{self.__class__.__name__}({', '.join(fields)})"
-
-    @staticmethod
-    def estimate_arrival(arrival_time: time) -> int:
-        """Calculate how many minutes are left till vehicle departs."""
-        delta = combine_today(arrival_time) - datetime.now()
-        return int(delta.total_seconds() // 60)
+        return cls(stop_code, route_id)
 
 
 @dataclass
-class DepartureResult:
-    stop: Stop
-    stop_time: StopTime
-    route: Route
+class QueryMatch:
+    """Class representing a query that got resolved and got entities assigned from the GTFS dataset."""
+
+    # data that can be assigned or derived at init and from static dataset
     trip: Trip
-    vehicle: Vehicle | None
-    current_stop_sequence: int
-    arrival: ArrivalTime
-    position: Position
-    message: BollardMessage
+    stop_time: StopTime
+    stop: Stop
+    route: Route
+    service: ServiceCalendar
+    planned_arrival: time
+
+    # below data can be obtained during first poll for RT data
+    # data that is static during the entire trip but requires initial RT data access
+    vehicle: Vehicle | None = None
+    position_history: list[tuple[int, int | None, Position | None]] = field(default_factory=list)
+
+
+@dataclass
+class RealtimePollResult:
+    """Class representing data obtained from realtime feeds."""
+
+    planned_arrival: ArrivalTime
+    realtime_arrival: ArrivalTime | None
+    status: VehicleStatus = VehicleStatus.NO_RT
+    message: BollardMessage | None = None
+    position: Position | None = None
+    vehicle: str | None = None
+    current_stop: int | None = None
 
 
 class Monitor:
     """Monitor performing query polls."""
 
-    def __init__(self, lookup) -> None:
-        self._lookup = lookup
+    def __init__(self, datset: GTFSStaticFeed, time_window: int = 30) -> None:
+        self.dataset = datset
+        self.time_window = time_window
 
-    def poll(self, query: Query) -> list[DepartureResult]:
-        """Find upcoming arrivals for the query, that will occur within specified time window."""
+    def resolve_query(self, query: Query) -> list[QueryMatch]:
+        """Find matching trips for the Query."""
 
-        print(f"Polling {query}")
+        matches: list[QueryMatch] = []
 
-        stop = self._lookup.stops.get(query.stop_code, None)
-        route = self._lookup.routes.get(query.route_id, None)
-        results: list[DepartureResult] = []
+        # determine stop and route data from lookup, resolve calendar
+        stop = self.dataset.stops.get(query.stop_code, None)
+        route = self.dataset.routes.get(query.route_id, None)
+        service = resolve_service_calendar(self.dataset)
 
-        service = resolve_service_calendar(self._lookup)
+        if not stop or not route or not service:
+            return matches
 
-        if not service or not route or not stop:
-            return results
+        for trip in self.dataset.trips.values():
 
-        gtfs_rt_feed = fetch_gtfs_rt_feed()
-        peka_rt_feed = fetch_peka_vm_feed(stop)
-        for trip in self._lookup.trips.values():
-
-            if trip.route_id != route.id:
+            # filter out trips with not matching routes and not matching calendars
+            if trip.route_id != route.id or trip.service_id != service.id:
                 continue
 
-            for stop_time in self._lookup.trip_stops[trip.id].items:
-                if (
-                    trip.service_id == service.id
-                    and stop.id == stop_time.stop_id
-                    and check_arrival_within_window(stop_time.arrival_time, time_window=query.time_window)
-                ):  # match service calendar, stop ID and arrival within specified time window to pinpoint a stop_time
+            for stop_time in self.dataset.trip_stops[trip.id].items:
 
-                    # get realtime data about the found trip
-                    rt_trip_update = gtfs_rt_feed.trip_updates.get(trip.id, None)
-                    rt_vehicle_pos = gtfs_rt_feed.vehicle_positions.get(trip.id, None)
-
-                    stop_time_update = None
-                    vehicle = None
-                    position = None
-                    status = None
-                    if rt_vehicle_pos:
-                        status = rt_vehicle_pos.current_status if hasattr(rt_vehicle_pos, "current_status") else None
-                    if rt_trip_update:
-                        # TODO: refactor parts when realtime might be not accessible, but estimation can be still
-                        # made from scheduled routes
-                        stop_time_update = resolve_closest_stop(stop_time.sequence, rt_trip_update.stop_time_update)
-                        vehicle = self._lookup.vehicles.get(rt_trip_update.vehicle.id, None)
-                        position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
-
-                    arrival_time = ArrivalTime(stop_time, stop_time_update, status)
-                    _messages = BollardMessages.from_dict(peka_rt_feed.message)
-                    message = _messages.get_current()
-
-                    results.append(
-                        DepartureResult(
-                            stop,
-                            stop_time,
-                            route,
-                            trip,
-                            vehicle,
-                            stop_time_update.stop_sequence if stop_time_update else None,
-                            arrival_time,
-                            position,
-                            message,
-                        )
+                # filter out stop times with not matching stops and outside time window
+                if not stop.id == stop_time.stop_id or not self.check_arrival_within_window(stop_time.arrival_time):
+                    continue
+                matches.append(
+                    QueryMatch(
+                        trip=trip,
+                        stop_time=stop_time,
+                        stop=stop,
+                        route=route,
+                        service=service,
+                        planned_arrival=stop_time.arrival_time,
                     )
-        return results
+                )
+        return matches
+
+    @staticmethod
+    def resolve_closest_stop(
+        sequence: int, stop_time_updates: list[TripUpdate.StopTimeUpdate]
+    ) -> TripUpdate.StopTimeUpdate:
+        """Out of Stop Time Update list entries, find the one that is closest to the queried stop sequence."""
+
+        previous_stops = (update for update in stop_time_updates if update.stop_sequence < sequence)
+        return max(previous_stops, key=lambda update: update.stop_sequence, default=None)
+
+    def check_arrival_within_window(self, arrival_time: time) -> bool:
+        """Calculate if arrival time for trip stop event will occur within Monitor's time window period counted from current time."""
+
+        time_start = datetime.now()
+        time_end = time_start + timedelta(minutes=self.time_window)
+        return time_start < combine_today(arrival_time) < time_end
+
+    def calculate_rt_arrival_time(self, query: QueryMatch, rt_trip_update: TripUpdate) -> ArrivalTime:
+        """Calculate estimated arrival based on delay obtained from realtime feed."""
+
+        stop_time_update = self.resolve_closest_stop(query.stop_time.sequence, rt_trip_update.stop_time_update)
+        summed_delay_dt = combine_today(query.planned_arrival) + timedelta(
+            seconds=stop_time_update.arrival.delay if stop_time_update else 0
+        )
+        time_ = summed_delay_dt.time()
+        return ArrivalTime(time_, stop_time_update.arrival.delay)
+
+    def determine_status(
+        self,
+        query: QueryMatch,
+        rt_trip_update: TripUpdate,
+        rt_vehicle_pos: VehiclePosition,
+    ) -> VehicleStatus:
+        """Determine vehicle status based on realtime feeds data."""
+
+        def is_vehicle_incoming_at(rt_vehicle_pos: VehiclePosition | None) -> bool:
+            """Check if vehicle has `current_status` present and set to `INCOMING_AT`, meaning the vehicle is at the terminus, waiting to begin a trip."""
+            if not rt_vehicle_pos:
+                return False
+            return rt_vehicle_pos.current_status == 0
+
+        status = VehicleStatus.NO_RT
+        delay = 0
+
+        if rt_trip_update:
+            stop_time_update = self.resolve_closest_stop(query.stop_time.sequence, rt_trip_update.stop_time_update)
+            delay = stop_time_update.arrival.delay
+
+        if rt_vehicle_pos:
+            if is_vehicle_incoming_at(rt_vehicle_pos) and rt_vehicle_pos.current_stop_sequence == 0:
+                status = VehicleStatus.AT_TERMINUS  # TODO: find better way to determine this
+            else:
+                if delay < -60:
+                    status = VehicleStatus.EARLY
+                elif 60 < delay <= 3 * 60:
+                    status = VehicleStatus.SLIGHTLY_DELAYED
+                elif delay > 3 * 60:
+                    status = VehicleStatus.DELAYED
+                else:
+                    status = VehicleStatus.ON_TIME
+
+        # dependent on position history
+        # TODO: determine DETOURED - check if last sequence change ocurred at position defined in Stop
+        # TODO: determine STUCK - check if position of last n updates didn't change much
+
+        return status
+
+    def poll(
+        self,
+        query: QueryMatch,
+        rt_trip_update: TripUpdate | None,
+        rt_vehicle_pos: VehiclePosition | None,
+        rt_messages: PEKARealTimeFeed | None,
+    ) -> RealtimePollResult:
+        """Find upcoming arrivals for the query, that will occur within specified time window."""
+
+        print(f"Polling {query.stop.id} {query.route.id}")
+
+        timestamp = int(datetime.timestamp(datetime.now()))
+        history_entry = (timestamp, None, None)
+        message = None
+        position = None
+        realtime_arrival = None
+        current_stop = None
+        planned_arrival = ArrivalTime(query.planned_arrival)
+
+        # get data related to vehicle position GTFS-RT feed
+        if rt_vehicle_pos:
+            position = Position(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
+            current_stop = rt_vehicle_pos.current_stop_sequence
+            history_entry = (timestamp, current_stop, position)
+
+        # get data related to trip_update GTFS-RT feed
+        if rt_trip_update:
+            # get vehicle data
+            if not query.vehicle:  # do not overwrite if already assigned
+                query.vehicle = self.dataset.vehicles.get(rt_trip_update.vehicle.id, None)
+
+            # calculate estimated live arrival time
+            realtime_arrival = self.calculate_rt_arrival_time(query, rt_trip_update)
+
+        # get data from PEKA virtual monitor
+        if rt_messages:
+            message = BollardMessages.from_dict(rt_messages.message).get_current()
+
+        status = self.determine_status(query, rt_trip_update, rt_vehicle_pos)
+        query.position_history.append(history_entry)
+
+        return RealtimePollResult(
+            message=message,
+            position=position,
+            planned_arrival=planned_arrival,
+            realtime_arrival=realtime_arrival,
+            current_stop=current_stop,
+            status=status,
+            vehicle=query.vehicle.id if query.vehicle else None,
+        )
