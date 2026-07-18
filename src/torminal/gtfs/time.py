@@ -11,7 +11,7 @@ Time formats across TORminal:
     * stop_times time: 20:34:00
 """
 
-from datetime import datetime, date, time, timezone
+from datetime import datetime, date, timedelta, timezone
 
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 fake_today = datetime(2026, 7, 17, 20, 0, 0)
@@ -38,24 +38,12 @@ def gtfs_date_to_dt(date: str) -> date:
     return datetime.strptime(date, "%Y%m%d").date()
 
 
-def gtfs_time_to_dt(time: str) -> time:
+def gtfs_time_to_dt(gtfs_time: str) -> datetime:
     """
-    Convert GTFS date string (HH:MM:SS e.g. 20:34:00) to datetime object.
-    Time string is normalized in case it overlaps onto the next day (e.g. 25:01:00 -> 01:01:00).
-
-    Important: the normalization most likely will introduce bugs, especially when calculating
-    deltas around midnight.
+    Convert GTFS time string (HH:MM:SS e.g. 20:34:00) to datetime object.
+    Handles times overflowing midnight (e.g. 25:03:00 -> tomorrow 01:03:00).
     """
-
-    _time = time.split(":")
-    hours = int(_time[0])
-    if hours > 23:
-        hours -= 24
-    _new_time = f"{hours:02d}:{_time[1]}:{_time[2]}"
-
-    return datetime.strptime(_new_time, "%H:%M:%S").time()
-
-
-def combine_today(time: time) -> datetime:
-    """Combine time object with today datetime."""
-    return datetime.combine(date.today(), time)
+    time = gtfs_time.split(":")
+    hours, minutes, seconds = int(time[0]), int(time[1]), int(time[2])
+    base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    return base + timedelta(hours=hours, minutes=minutes, seconds=seconds)

@@ -1,5 +1,5 @@
 from google.transit.gtfs_realtime_pb2 import TripUpdate, Position, VehiclePosition
-from datetime import datetime, timedelta, time
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Self
 from collections import defaultdict
@@ -9,7 +9,6 @@ from torminal.config import config
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.gtfs.realtime import PEKARealTimeFeed
 from torminal.gtfs.utils import resolve_service_calendar, ArrivalTime
-from torminal.gtfs.time import combine_today
 from torminal.gtfs.data import (
     StopTime,
     Stop,
@@ -66,7 +65,7 @@ class QueryMatch:
     stop: Stop
     route: Route
     service: ServiceCalendar
-    planned_arrival: time
+    planned_arrival: datetime
 
     # below data can be obtained during first poll for RT data
     # data that is static during the entire trip but requires initial RT data access
@@ -171,12 +170,12 @@ class Monitor:
         previous_stops = (update for update in stop_time_updates if update.stop_sequence < sequence)
         return max(previous_stops, key=lambda update: update.stop_sequence, default=None)
 
-    def check_arrival_within_window(self, arrival_time: time) -> bool:
+    def check_arrival_within_window(self, arrival_time: datetime) -> bool:
         """Calculate if arrival time for trip stop event will occur within Monitor's time window period counted from current time."""
 
         time_start = datetime.now()
         time_end = time_start + timedelta(minutes=self.time_window)
-        return time_start < combine_today(arrival_time) < time_end
+        return time_start < arrival_time < time_end
 
     def calculate_rt_arrival_time(self, query: QueryMatch, rt_trip_update: TripUpdate) -> ArrivalTime | None:
         """Calculate estimated arrival based on delay obtained from realtime feed."""
@@ -185,11 +184,10 @@ class Monitor:
         if not stop_time_update:
             return None
 
-        summed_delay_dt = combine_today(query.planned_arrival) + timedelta(
+        summed_delay_dt = query.planned_arrival + timedelta(
             seconds=stop_time_update.arrival.delay if stop_time_update else 0
         )
-        time_ = summed_delay_dt.time()
-        return ArrivalTime(time_, stop_time_update.arrival.delay)
+        return ArrivalTime(summed_delay_dt, stop_time_update.arrival.delay)
 
     def determine_status(
         self,

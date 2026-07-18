@@ -1,34 +1,34 @@
-from datetime import datetime, time
+from datetime import datetime
 
 from torminal.gtfs.data import ServiceCalendar
 from torminal.gtfs.static import GTFSStaticFeed
-from torminal.gtfs.time import combine_today, weekday_names
+from torminal.gtfs.time import weekday_names
 
 
 class ArrivalTime:
     """Class calculating planned and live arrival times"""
 
-    time_: time
+    time: datetime
     """Exact time of arrival"""
     eta: int
     """Time left to arrival in minutes"""
     delay: int
     """Delay in seconds (can be negative, if vehicle passed a stop early)"""
 
-    def __init__(self, arrival_time: time, delay: int = 0) -> None:
+    def __init__(self, arrival_time: datetime, delay: int = 0) -> None:
 
-        self.time_ = arrival_time
+        self.time = arrival_time
         self.eta = self.estimate_arrival(arrival_time)
         self.delay = delay
 
     def __repr__(self) -> str:
-        fields = (f"time={self.time_!r}", f"eta={self.eta!r}", f"delay={self.delay!r}")
+        fields = (f"time={self.time!r}", f"eta={self.eta!r}", f"delay={self.delay!r}")
         return f"{self.__class__.__name__}({', '.join(fields)})"
 
     @staticmethod
-    def estimate_arrival(arrival_time: time) -> int:
+    def estimate_arrival(arrival_time: datetime) -> int:
         """Calculate how many minutes are left till vehicle departs."""
-        delta = combine_today(arrival_time) - datetime.now()
+        delta = arrival_time - datetime.now()
         return int(delta.total_seconds() // 60)
 
 

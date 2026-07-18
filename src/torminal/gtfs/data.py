@@ -5,7 +5,7 @@ from enum import IntEnum, StrEnum
 from typing import Literal, TypeVar, Self, ClassVar, Generic, Any
 from abc import ABC, abstractmethod
 from bs4 import BeautifulSoup
-from datetime import datetime, date, time, UTC
+from datetime import datetime, date, UTC
 
 from torminal.gtfs.time import iso_to_dt, gtfs_date_to_dt, gtfs_time_to_dt
 
@@ -367,8 +367,8 @@ class StopTime(Model):
     _key = "stop_sequence"
 
     sequence: int
-    arrival_time: time
-    departure_time: time
+    arrival_time: datetime
+    departure_time: datetime
     stop_id: str
     pickup_type: DropoffPickupType
     drop_off_type: DropoffPickupType
