@@ -37,19 +37,21 @@ class Query:
         return [self.stop_code, self.route_id]
 
     @classmethod
-    def from_input(cls, stop_input: str, route_intput: str) -> Self | None:
+    def from_input(cls, stop_input: str, route_input: str) -> Self | None:
         """
         Return a Query based on user input. Following syntax of the input is assumed:
 
             * stop input: ' (CODE123) Stop Name  '
-            * route input: '  123 Route direction - Route direction  ' (allows routes like T6)
+            * route input: '  (123) Route direction - Route direction  ' (allows routes like T6)
         """
-        re_stop_code = re.search(r"^\s*\(([^)]+)\)", stop_input)
+        pattern = r"^\s*\(\s*([A-Z0-9]+)\s*\)"
+
+        re_stop_code = re.search(pattern, stop_input)
         if not re_stop_code:
             return None
         stop_code = re_stop_code.group(1)
 
-        re_route_id = re.search(r"^\s*([A-Za-z]?\d+)", route_intput)
+        re_route_id = re.search(pattern, route_input)
         if not re_route_id:
             return None
         route_id = re_route_id.group(1)
@@ -114,6 +116,7 @@ class Monitor:
 
         for match in matches:
             self.matched_queries[match.stop.code].append(match)
+            print(f"Appended {match.trip.id}")
 
     def remove_query(self, query: Query) -> None:
         """Remove query operation - removes query from config"""

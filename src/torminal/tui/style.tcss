@@ -1,6 +1,7 @@
-LoadingScreen {
+LoadingScreen, QueryInput {
     align: center middle;
     background: $background 60%;
+    height: 100%;
 }
 
 Spinner {
@@ -12,10 +13,13 @@ Spinner {
     width: 60;
     height: auto;
     padding: 1 2;
-    border: solid $primary;
+    border: round $primary;
     background: $panel;
     layout: vertical;
     align: center middle;
+    border-title-background: $primary;
+    border-title-color: white;
+    border-title-style: bold;
 }
 
 .box Label {
@@ -32,4 +36,22 @@ Spinner {
 .box Label#loading_message {
     text-style: italic;
     color: $panel-lighten-3;
+}
+.box Input{
+    border: thick $panel;
+}
+
+.box Input:focus{
+    border-left: thick $primary;
+}
+
+.horizontal_buttons {
+    height: auto;
+    width: 100%;
+    align: center middle;
+}
+
+.horizontal_buttons Button{
+    width: 1fr;
+    border: thick $panel;
 }

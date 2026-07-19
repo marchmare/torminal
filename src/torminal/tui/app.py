@@ -1,21 +1,16 @@
 """TORminal TUI definition."""
 
 import asyncio
-from datetime import datetime
-from collections import defaultdict
 from textual import work
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header, Input, Button
-from textual.containers import Horizontal, Vertical
-from textual.screen import ModalScreen
-from textual_autocomplete import AutoComplete, DropdownItem
+from textual.widgets import Footer, Header
 from httpx import ConnectTimeout
 
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.query import Query, Monitor
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
-from torminal.tui.loadingscreen import LoadingScreen
+from torminal.tui.modals import LoadingScreen, QueryInput
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
 
@@ -108,9 +103,26 @@ class TORminal(App):
         yield Header()
         yield Footer(show_command_palette=False)
 
-    def action_add_new_stop(self) -> None:
+    @work
+    async def action_add_new_stop(self) -> None:
         """An action to add new stop-route query to monitor."""
-        pass
+
+        stops = [
+            f"[bold $text on $accent-darken-2]({stop.code:>7})[/] {stop.name}" for stop in self.dataset.stops.values()
+        ]
+
+        routes = [
+            f"[bold $text on $accent-darken-2]({route.id:>3})[/] {route.long_name.split('|')[0]}"
+            for route in self.dataset.routes.values()
+        ]
+
+        stop_input, route_input = await self.push_screen_wait(QueryInput(stops, routes))
+
+        try:
+            query = Query.from_input(stop_input, route_input)
+            self.monitor.add_query(query)
+        except AttributeError:
+            pass
 
     def action_remove_selected(self) -> None:
         """An action to remove selected query from the dashboard."""
