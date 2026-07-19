@@ -7,7 +7,7 @@ from shapely.geometry import Point
 import re
 
 from torminal.config import config
-from torminal.gtfs.gps import gps_point, check_point_on_shape, calculate_mean_velocity
+from torminal.gtfs.gps import gps_point, calculate_mean_velocity
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.gtfs.realtime import PEKARealTimeFeed, GTFSRealTimeFeed
 from torminal.gtfs.utils import resolve_service_calendar, ArrivalTime
@@ -208,12 +208,20 @@ class Monitor:
                 return False
             return rt_vehicle_pos.current_status == 0
 
-        def is_vehicle_stuck(query: QueryMatch, window: int = 10, threshold: float = 0.5) -> bool:
-            """
-            Check if vehicle's recent average velocity is near 0 for prolonged time.
-            """
-            recent = [velocity for _, velocity in query.velocity_history[-window:] if velocity is not None]
-            return len(recent) >= window and (sum(recent) / len(recent)) < threshold
+        def is_vehicle_stuck(query: QueryMatch) -> bool:
+            """Check if vehicle's recent average velocity is near 0 for prolonged time."""
+
+            v_threshold = 2.0  # km/h
+            window = 3 * 60  # 3 minutes
+            history_len = int(window / config.gtfs_rt_poll_interval)
+            history_slice = [v for _, v in query.velocity_history[-history_len:] if v is not None]
+
+            return len(history_slice) >= history_len and (sum(history_slice) / len(history_slice)) < v_threshold
+
+        def is_vehicle_detoured(query: QueryMatch, rt_vehicle_pos: VehiclePosition) -> bool:
+            """Check if vehicle is in 100m proximity from the trip shape."""
+            position = gps_point(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
+            return not query.shape.path.contains(position)
 
         status = VehicleStatus.NO_RT
         delay = 0
@@ -237,11 +245,10 @@ class Monitor:
                 else:
                     status = VehicleStatus.ON_TIME
 
-                position = gps_point(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
-                if not check_point_on_shape(position, query.shape):
-                    return VehicleStatus.DETOURED
-                if is_vehicle_stuck(query):
-                    return VehicleStatus.STUCK
+                if is_vehicle_detoured(query, rt_vehicle_pos):
+                    status = VehicleStatus.DETOURED
+                if is_vehicle_stuck(query) and not status == VehicleStatus.AT_TERMINUS:
+                    status = VehicleStatus.STUCK
 
         return status
 

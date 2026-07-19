@@ -7,7 +7,7 @@ from csv import DictReader
 from zipfile import ZipFile
 from io import TextIOWrapper
 
-from torminal.gtfs.gps import shape_to_polygon
+from torminal.gtfs.gps import shape_to_path
 from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
 from torminal.gtfs.data import (
     Trip,
@@ -110,9 +110,9 @@ G = TypeVar("G", bound=GroupModel)
 
 
 def build_all_polygons(shapes: dict[str, Shape]) -> None:
-    """Build and assign polygon for a Shape from its items."""
+    """Build and assign buffered path for a Shape from its items."""
     for shape in shapes.values():
-        shape.polygon = shape_to_polygon(shape.items)
+        shape.path = shape_to_path(shape.items)
 
 
 def parse_txt_as_dict(model: type[M], z: ZipFile) -> dict[str, M]:

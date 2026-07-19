@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from torminal.gtfs.data import ShapePoint, Shape
 
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point, LineString
 from pyproj import Transformer
 
 # transformers
@@ -33,18 +33,12 @@ def calculate_points_distance(point1: Point, point2: Point) -> float:
     return point1.distance(point2)
 
 
-def shape_to_polygon(shape_points: list[ShapePoint]) -> Polygon:
-    """Create Polygon out of ShapePoints defined for a Shape (already in PL-2000)."""
+def shape_to_path(shape_points: list[ShapePoint], radius: int = 80) -> LineString:
+    """Create buffered path out of ShapePoints list (already in PL-2000)."""
 
     ordered_list = sorted(shape_points, key=lambda item: item.sequence)
-    return Polygon([item.point for item in ordered_list])
-
-
-def check_point_on_shape(point: Point, shape: Shape, radius: int = 50) -> bool:
-    """Check if point is in close proximity of the polygon defined by Shape."""
-
-    buffered_polygon = shape.polygon.buffer(radius)
-    return buffered_polygon.contains(point)
+    line = LineString([item.point for item in ordered_list])
+    return line.buffer(radius)
 
 
 def calculate_velocity(
