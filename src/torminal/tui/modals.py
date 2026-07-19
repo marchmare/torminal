@@ -9,6 +9,7 @@ from textual_autocomplete import AutoComplete, DropdownItem
 from torminal.gtfs.static import GTFSStaticLoader
 from torminal.gtfs.static import ProgressEvent
 from torminal.tui.widgets.spinner import Spinner
+from torminal.gtfs.data import Route, Stop
 from asyncio import sleep
 
 LOGO = """░▀█▀░█▀█░█▀▄░█▄█░▀█▀░█▀█░█▀█░█░░░
@@ -61,6 +62,16 @@ class LoadingScreen(ModalScreen):
         return self.query_one("#loading_message", Label)
 
 
+def get_markup_stops(stops: list[Stop]) -> list[str]:
+    """Helper function, prepare formatted list of route strings to use for autocompletion."""
+    return [f"[bold $text on $accent 50%]({stop.code:>7})[/] {stop.name}" for stop in stops]
+
+
+def get_markup_routes(routes: list[Route]) -> list[str]:
+    """Helper function, prepare formatted list of route strings to use for autocompletion."""
+    return [f"[bold $text on $accent 50%]({route.id:>3})[/] {route.long_name.split('|')[0]}" for route in routes]
+
+
 class QueryInput(ModalScreen):
     def __init__(self, stops: list[str], routes: list[str]) -> None:
         super().__init__()
@@ -88,7 +99,7 @@ class QueryInput(ModalScreen):
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "cancel":
-            self.dismiss(None)
+            self.dismiss(("", ""))
 
         elif event.button.id == "add":
             self.dismiss((self.stop_input.value, self.route_input.value))

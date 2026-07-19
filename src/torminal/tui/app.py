@@ -3,14 +3,16 @@
 import asyncio
 from textual import work
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header
-from httpx import ConnectTimeout
+from textual.widgets import Footer, Header, Static
+from textual.containers import Grid
+from httpx import ConnectTimeout, ConnectError
 
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.query import Query, Monitor
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
-from torminal.tui.modals import LoadingScreen, QueryInput
+from torminal.tui.modals import LoadingScreen, QueryInput, get_markup_routes, get_markup_stops
+from torminal.tui.widgets.bollard import Bollard
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
 
@@ -21,7 +23,7 @@ class TORminal(App):
     CSS_PATH = "style.tcss"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
-        ("a", "add_new_stop", "Add new stop"),
+        ("a", "add_new", "Add new query"),
         ("r", "remove_stops", "Remove stops"),
         ("o", "options", "Options"),
         ("A", "about", "About"),
@@ -37,6 +39,8 @@ class TORminal(App):
     _peka_cache: dict[str, PEKARealTimeFeed] = {}
     _gtfs_rt_cache: GTFSRealTimeFeed | None = None
 
+    _bollards: dict[str, Bollard] = {}
+
     @work
     async def on_mount(self) -> None:
         self.theme = "gruvbox"
@@ -46,12 +50,16 @@ class TORminal(App):
         self.dataset = await self.push_screen_wait(LoadingScreen())
 
         self.monitor = Monitor(self.dataset)
-        self.monitor.add_query(Query("NARA71", "214"))
-        self.monitor.add_query(Query("NARA71", "3"))
-        self.monitor.add_query(Query("NARA71", "10"))
+        await self.add_new_from_config()
 
         self._poll_peka()
         self._poll_gtfs_rt()
+
+    def compose(self) -> ComposeResult:
+        yield Header()
+        yield Footer(show_command_palette=False)
+
+        yield Grid(classes="dashboard")
 
     @work
     async def _poll_gtfs_rt(self) -> None:
@@ -62,7 +70,7 @@ class TORminal(App):
         while True:
             try:
                 self._gtfs_rt_cache = await fetch_gtfs_rt_feed()
-            except ConnectTimeout:
+            except (ConnectTimeout, ConnectError):
                 pass
 
             self._update_results()
@@ -77,7 +85,7 @@ class TORminal(App):
         while True:
             try:
                 self._peka_cache = await self._fetch_all_peka()
-            except ConnectTimeout:
+            except (ConnectTimeout, ConnectError):
                 pass
 
             self._update_results()
@@ -99,30 +107,46 @@ class TORminal(App):
         for result in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
             print(result)
 
-    def compose(self) -> ComposeResult:
-        yield Header()
-        yield Footer(show_command_palette=False)
+    async def add_new_from_config(self) -> None:
+        """Load queries from config and put them on dashboard"""
+
+        for query in config.queries:
+            await self._add_new(Query(query[0], query[1]))
 
     @work
-    async def action_add_new_stop(self) -> None:
+    async def action_add_new(self) -> None:
         """An action to add new stop-route query to monitor."""
 
-        stops = [
-            f"[bold $text on $accent-darken-2]({stop.code:>7})[/] {stop.name}" for stop in self.dataset.stops.values()
-        ]
-
-        routes = [
-            f"[bold $text on $accent-darken-2]({route.id:>3})[/] {route.long_name.split('|')[0]}"
-            for route in self.dataset.routes.values()
-        ]
-
+        # push query input modal screen
+        stops = get_markup_stops(list(self.dataset.stops.values()))
+        routes = get_markup_routes(list(self.dataset.routes.values()))
         stop_input, route_input = await self.push_screen_wait(QueryInput(stops, routes))
 
-        try:
-            query = Query.from_input(stop_input, route_input)
-            self.monitor.add_query(query)
-        except AttributeError:
-            pass
+        if query := Query.from_input(stop_input, route_input):
+            await self._add_new(query)
+
+    async def _add_new(self, query: Query) -> None:
+        """Add query to dashboard"""
+
+        # update Monitor with the query
+        self.monitor.add_query(query)
+
+        # update dashboard
+        stop = self.dataset.stops.get(query.stop_code)
+        route = self.dataset.routes.get(query.route_id)
+
+        # if Bollard for this stop already exists
+        if bollard := self._bollards.get(stop.code, None):
+            if route not in bollard.routes:
+                bollard.routes.append(route)
+            bollard.update_routes()
+            return
+
+        # if new Bollard needs to be added
+        new_bollard = Bollard(stop)
+        new_bollard.routes.append(route)
+        self._bollards[stop.code] = new_bollard
+        await self.dashboard.mount(new_bollard)
 
     def action_remove_selected(self) -> None:
         """An action to remove selected query from the dashboard."""
@@ -142,3 +166,7 @@ class TORminal(App):
 
     async def on_exit(self) -> None:
         await HTTPXCLIENT.aclose()
+
+    @property
+    def dashboard(self) -> Grid:
+        return self.query_one(".dashboard", Grid)

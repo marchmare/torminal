@@ -42,7 +42,7 @@ Spinner {
 }
 
 .box Input:focus{
-    border-left: thick $primary;
+    border-left: thick $accent;
 }
 
 .horizontal_buttons {
@@ -54,4 +54,106 @@ Spinner {
 .horizontal_buttons Button{
     width: 1fr;
     border: thick $panel;
+}
+
+.dashboard {
+    grid-size: 2;
+    grid-rows: auto;
+    grid-gutter: 1 2;
+    overflow-y: auto;
+    margin: 1;
+}
+
+Bollard {
+    height: auto;
+    border: round $primary;
+    background: $panel;
+    margin: 0 1;
+    padding: 0 1;
+    border-title-background: $foreground;
+    border-title-color: black;
+    border-title-style: bold;
+
+    & DataTable {
+        color: $warning-darken-2;
+        background: $background;
+        max-height: 8;
+        
+        width: 100%;
+
+        &:focus {
+            background-tint: $background-lighten-1 30%;
+        }
+
+        & > .datatable--cursor {
+            background: $primary-darken-3 10%;
+            color: $warning;
+        }
+
+        &:focus > .datatable--cursor {
+            background: $primary-darken-1 75%;
+            color: $foreground;
+        }
+    }
+
+    & .datatable--header {
+        background: $background-lighten-1;
+        color: $text;
+        background-tint: $background-lighten-1;
+    }
+
+    & DataTable:focus .datatable--header {
+        background: $background-lighten-1;
+        color: $text;
+    }
+
+    & .datatable--header-hover {
+        background: $background-lighten-1;
+        color: $text;
+    }
+
+    & Link.info {
+        padding: 0 1;
+        text-style: bold italic;
+
+        &:hover {
+            background: $background-lighten-1 30%;
+        }
+    }
+
+    & Label.info {
+        width: 100%;
+        padding: 0 1;
+        link-color: white 90%;
+        link-background-hover: $accent;
+        link-style: bold;
+        height: auto;
+    }
+
+    & Label.routes {
+        width: 100%;
+        text-style: bold;
+        padding: 0 1;
+        content-align: right middle;
+        background: $background-lighten-1;
+        color: $text;
+    }
+}
+
+
+AutoComplete {
+    & AutoCompleteList {
+        max-height: 6;  
+        background: $background;  
+    }
+
+    & .autocomplete--highlight-match {
+        color: $text;
+        text-style: bold;
+    }
+
+    & .option-list--option-highlighted {
+        background: $primary;
+        text-style: italic;  
+    }
 }
