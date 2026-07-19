@@ -69,7 +69,7 @@ def calculate_velocity(
 def calculate_mean_velocity(position_history: list[tuple[int, int | None, Point | None]]) -> float | None:
     """Calculate mean velocity."""
 
-    valid = [(timestamp, position) for timestamp, _, position in position_history if position is not None]
+    valid = [(timestamp, _, position) for timestamp, _, position in position_history if position is not None]
     if len(valid) < 2:
         return None
 
