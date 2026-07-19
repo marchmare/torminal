@@ -1,18 +1,23 @@
 """TORminal TUI definition."""
 
 import asyncio
+from datetime import datetime
+from collections import defaultdict
+from textual import work
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Input, Button
 from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
 from textual_autocomplete import AutoComplete, DropdownItem
+from httpx import ConnectTimeout
+
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.query import Query, Monitor
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.tui.loadingscreen import LoadingScreen
 from torminal.requests import HTTPXCLIENT
-from textual import work
+from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
 
 
 class TORminal(App):
@@ -32,6 +37,11 @@ class TORminal(App):
     monitor: Monitor
     config: Config = config
 
+    _peka_poll_interval: int = 60
+    _gtfs_rt_poll_interval: int = 5
+    _peka_cache: dict[str, PEKARealTimeFeed] = {}
+    _gtfs_rt_cache: GTFSRealTimeFeed | None = None
+
     @work
     async def on_mount(self) -> None:
         self.theme = "gruvbox"
@@ -42,37 +52,57 @@ class TORminal(App):
 
         self.monitor = Monitor(self.dataset)
         self.monitor.add_query(Query("NARA71", "214"))
+        self.monitor.add_query(Query("NARA71", "3"))
+        self.monitor.add_query(Query("NARA71", "10"))
 
-        self.poll_loop()
+        self._poll_peka()
+        self._poll_gtfs_rt()
 
-    @work(exclusive=True)
-    async def poll_loop(self) -> None:
-        """Recurring poll loop"""
-
+    @work
+    async def _poll_gtfs_rt(self) -> None:
+        """
+        Get GTFS realtime feeds using interval determined by 'config.gtfs_rt_poll_interval'
+        and prepare results.
+        """
         while True:
-            await self.poll()
-            await asyncio.sleep(30)
+            try:
+                self._gtfs_rt_cache = await fetch_gtfs_rt_feed()
+            except ConnectTimeout:
+                pass
 
-    async def poll(self) -> None:
-        print("Polling...")
+            self._update_results()
+            await asyncio.sleep(config.gtfs_rt_poll_interval)
 
+    @work
+    async def _poll_peka(self) -> None:
+        """
+        Get PEKA virtual monitor feed using interval determined by 'config.peka_poll_interval'
+        and prepare results.
+        """
+        while True:
+            try:
+                self._peka_cache = await self._fetch_all_peka()
+            except ConnectTimeout:
+                pass
+
+            self._update_results()
+            await asyncio.sleep(config.peka_poll_interval)
+
+    async def _fetch_all_peka(self) -> dict[str, PEKARealTimeFeed]:
+        """Helper method to prepare dictionary of PEKA feeds for each stop in matched queries"""
         peka_tasks = {
             stop: fetch_peka_vm_feed(self.monitor.dataset.stops.get(stop)) for stop in self.monitor.matched_queries
         }
         peka_results = await asyncio.gather(*peka_tasks.values())
-        peka_feeds = dict(zip(peka_tasks.keys(), peka_results))
+        return dict(zip(peka_tasks.keys(), peka_results))
 
-        rt_gtfs = await fetch_gtfs_rt_feed()
+    def _update_results(self) -> None:
+        """Gather feeds and prepare a result."""
+        if not self._gtfs_rt_cache:
+            return
 
-        for stop, stop_matches in self.monitor.matched_queries.items():
-            rt_msg = peka_feeds[stop]
-
-            for match in stop_matches:
-                rt_tu = rt_gtfs.trip_updates.get(match.trip.id, None)
-                rt_vp = rt_gtfs.vehicle_positions.get(match.trip.id, None)
-
-                result = self.monitor.poll(match, rt_tu, rt_vp, rt_msg)
-                print(result)
+        for result in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
+            print(result)
 
     def compose(self) -> ComposeResult:
         yield Header()

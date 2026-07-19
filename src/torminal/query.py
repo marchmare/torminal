@@ -1,7 +1,7 @@
 from google.transit.gtfs_realtime_pb2 import TripUpdate, VehiclePosition
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
-from typing import Self
+from typing import Self, Generator
 from collections import defaultdict
 from shapely.geometry import Point
 import re
@@ -9,7 +9,7 @@ import re
 from torminal.config import config
 from torminal.gtfs.gps import gps_point, check_point_on_shape, calculate_mean_velocity
 from torminal.gtfs.static import GTFSStaticFeed
-from torminal.gtfs.realtime import PEKARealTimeFeed
+from torminal.gtfs.realtime import PEKARealTimeFeed, GTFSRealTimeFeed
 from torminal.gtfs.utils import resolve_service_calendar, ArrivalTime
 from torminal.gtfs.data import (
     StopTime,
@@ -143,17 +143,15 @@ class Monitor:
             return matches
 
         for trip in self.dataset.trips.values():
-
             # filter out trips with not matching routes and not matching calendars
             if trip.route_id != route.id or trip.service_id != service.id:
                 continue
 
             for stop_time in self.dataset.trip_stops[trip.id].items:
-
                 # filter out stop times with not matching stops and outside time window
+
                 if not stop.id == stop_time.stop_id or not self.check_arrival_within_window(stop_time.arrival_time):
                     continue
-
                 shape = self.dataset.shapes.get(trip.shape_id, None)
                 matches.append(
                     QueryMatch(
@@ -181,7 +179,7 @@ class Monitor:
         """Calculate if arrival time for trip stop event will occur within Monitor's time window period counted from current time."""
 
         time_start = datetime.now()
-        time_end = time_start + timedelta(minutes=self.time_window)
+        time_end = time_start + timedelta(minutes=config.time_window)
         return time_start < arrival_time < time_end
 
     def calculate_rt_arrival_time(self, query: QueryMatch, rt_trip_update: TripUpdate) -> ArrivalTime | None:
@@ -213,7 +211,6 @@ class Monitor:
         def is_vehicle_stuck(query: QueryMatch, window: int = 10, threshold: float = 0.5) -> bool:
             """
             Check if vehicle's recent average velocity is near 0 for prolonged time.
-            TODO: adjust this check after periodic timer is implemented for polling
             """
             recent = [velocity for _, velocity in query.velocity_history[-window:] if velocity is not None]
             return len(recent) >= window and (sum(recent) / len(recent)) < threshold
@@ -247,6 +244,21 @@ class Monitor:
                     return VehicleStatus.STUCK
 
         return status
+
+    def poll_all(
+        self,
+        rt_feed: GTFSRealTimeFeed,
+        peka_feeds: dict[str, PEKARealTimeFeed | None],
+    ) -> Generator[RealtimePollResult, None, None]:
+        """Poll all matched queries and yield results."""
+
+        for stop, stop_matches in self.matched_queries.items():
+            rt_msg = peka_feeds.get(stop)
+
+            for match in stop_matches:
+                rt_tu = rt_feed.trip_updates.get(match.trip.id)
+                rt_vp = rt_feed.vehicle_positions.get(match.trip.id)
+                yield self.poll(match, rt_tu, rt_vp, rt_msg)
 
     def poll(
         self,

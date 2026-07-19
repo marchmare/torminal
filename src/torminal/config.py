@@ -12,7 +12,9 @@ CONFIG_PATH = CONFIG_DIR / "settings.toml"
 class Config:
     """Class representing user settings, stores data about queries defined during TORminal session."""
 
-    time_window: int = 30
+    time_window: int = 60
+    peka_poll_interval = 60
+    gtfs_rt_poll_interval = 5
     queries: list[list[str]] = field(default_factory=list)
 
     def add_query(self, query: list[str, str]) -> None:
