@@ -11,7 +11,7 @@ Time formats across TORminal:
     * stop_times time: 20:34:00
 """
 
-from datetime import datetime, date, timedelta, timezone
+from datetime import datetime, date, time, timedelta, timezone
 
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 fake_today = datetime(2026, 7, 17, 20, 0, 0)
@@ -43,7 +43,11 @@ def gtfs_time_to_dt(gtfs_time: str) -> datetime:
     Convert GTFS time string (HH:MM:SS e.g. 20:34:00) to datetime object.
     Handles times overflowing midnight (e.g. 25:03:00 -> tomorrow 01:03:00).
     """
-    time = gtfs_time.split(":")
-    hours, minutes, seconds = int(time[0]), int(time[1]), int(time[2])
-    base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    time_ = gtfs_time.split(":")
+    hours, minutes, seconds = int(time_[0]), int(time_[1]), int(time_[2])
+    now = datetime.now()
+    if hours > 24 and now.time() < time(4, 0):  # TODO: this needs to be the hour of night/day trip boundary
+        base = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
     return base + timedelta(hours=hours, minutes=minutes, seconds=seconds)
