@@ -2,7 +2,7 @@ from google.transit.gtfs_realtime_pb2 import TripUpdate, VehiclePosition
 from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from typing import Self, Generator
-from collections import defaultdict
+from collections import defaultdict, deque
 from shapely.geometry import Point
 import re
 
@@ -73,7 +73,7 @@ class QueryMatch:
     # below data can be obtained during first poll for RT data
     # data that is static during the entire trip but requires initial RT data access
     vehicle: Vehicle | None = None
-    position_history: list[tuple[int, int | None, Point | None]] = field(default_factory=list)
+    position_history: deque[tuple[int, int | None, Point | None]] = field(default_factory=lambda: deque(maxlen=5))
     velocity_history: list[tuple[int, float | None]] = field(default_factory=list)
 
     def to_config(self) -> list[str, str]:
@@ -293,7 +293,7 @@ class Monitor:
             position = gps_point(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
             current_stop = rt_vehicle_pos.current_stop_sequence
             history_entry = (timestamp, current_stop, position)
-            velocity = calculate_mean_velocity(query.position_history[-5:])
+            velocity = calculate_mean_velocity(query.position_history)
 
             if velocity is not None:
                 velocity_entry = (timestamp, velocity)
