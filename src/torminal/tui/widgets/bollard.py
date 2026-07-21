@@ -130,17 +130,22 @@ class Bollard(Vertical):
         Update rows in datatable using Realtime poll results for the specific Stop.
         To be called as Monitor's poll callback.
         """
+
+        def is_off_schedule(status: VehicleStatus) -> bool:
+            return status in [VehicleStatus.DELAYED, VehicleStatus.SLIGHTLY_DELAYED, VehicleStatus.EARLY]
+
+        def is_rt_satus_unavailable(status: VehicleStatus) -> bool:
+            return status in [VehicleStatus.NO_RT, VehicleStatus.AT_TERMINUS]
+
         _cursor = self.table.cursor_coordinate
         self.table.clear()
 
         rows = []
         for poll in polls:
             eta = (
-                poll.realtime_arrival.eta
-                if poll.realtime_arrival
-                and poll.status != VehicleStatus.NO_RT
-                and poll.status != VehicleStatus.AT_TERMINUS
-                else poll.planned_arrival.eta
+                poll.planned_arrival.eta
+                if not poll.realtime_arrival and is_rt_satus_unavailable(poll.status)
+                else poll.realtime_arrival.eta
             )
             rows.append(
                 (
@@ -148,10 +153,9 @@ class Bollard(Vertical):
                     poll.planned_arrival.time.strftime("%H:%M"),
                     format_eta(eta),
                     (
-                        format_status(poll.status)
-                        if not poll.realtime_arrival
-                        or (poll.status != VehicleStatus.DELAYED and poll.status != VehicleStatus.SLIGHTLY_DELAYED)
-                        else format_delay(poll.realtime_arrival)
+                        format_delay(poll.realtime_arrival)
+                        if poll.realtime_arrival and is_off_schedule(poll.status)
+                        else format_status(poll.status)
                     ),
                     poll.destination,
                 )
