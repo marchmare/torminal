@@ -87,6 +87,8 @@ class QueryMatch:
 class RealtimePollResult:
     """Class representing data obtained from realtime feeds."""
 
+    route_id: str
+    destination: str
     planned_arrival: ArrivalTime
     realtime_arrival: ArrivalTime | None
     status: VehicleStatus = VehicleStatus.NO_RT
@@ -268,7 +270,7 @@ class Monitor:
             for match in stop_matches:
                 rt_tu = rt_feed.trip_updates.get(match.trip.id)
                 rt_vp = rt_feed.vehicle_positions.get(match.trip.id)
-                yield self.poll(match, rt_tu, rt_vp, rt_msg)
+                yield (stop, self.poll(match, rt_tu, rt_vp, rt_msg))
 
     def poll(
         self,
@@ -327,4 +329,6 @@ class Monitor:
             status=status,
             velocity=velocity,
             vehicle=query.vehicle.id if query.vehicle else None,
+            route_id=query.route.id,
+            destination=query.trip.headsign,
         )

@@ -77,8 +77,8 @@ Bollard {
     & DataTable {
         color: $warning-darken-2;
         background: $background;
-        max-height: 8;
-        
+        overflow-y: hidden;
+        height: 8;
         width: 100%;
 
         &:focus {

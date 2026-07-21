@@ -6,15 +6,17 @@ from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header, Static
 from textual.containers import Grid
 from httpx import ConnectTimeout, ConnectError
-
+from collections import defaultdict
+from datetime import datetime
 from torminal.gtfs.static import GTFSStaticFeed
-from torminal.query import Query, Monitor
+from torminal.query import Query, Monitor, RealtimePollResult
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.tui.modals import LoadingScreen, QueryInput, get_markup_routes, get_markup_stops
 from torminal.tui.widgets.bollard import Bollard
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
+from torminal.gtfs.data import BollardMessage
 
 
 class TORminal(App):
@@ -100,12 +102,18 @@ class TORminal(App):
         return dict(zip(peka_tasks.keys(), peka_results))
 
     def _update_results(self) -> None:
-        """Gather feeds and prepare a result."""
         if not self._gtfs_rt_cache:
             return
 
-        for result in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
-            print(result)
+        results: dict[str, list[RealtimePollResult]] = defaultdict(list)
+        for stop_code, poll_result in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
+            print(poll_result)
+            results[stop_code].append(poll_result)
+
+        for stop_code, polls in results.items():
+            if bollard := self._bollards.get(stop_code):
+                bollard.update_datatable(polls)
+                bollard.update_message(polls[0].message)
 
     async def add_new_from_config(self) -> None:
         """Load queries from config and put them on dashboard"""
