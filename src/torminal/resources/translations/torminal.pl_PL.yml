@@ -1,0 +1,21 @@
+pl_PL:
+  query_add: Dodaj przystanek
+  query_remove: Usuń przystanek
+  app_options: Opcje
+  app_about: O programie
+  app_quit: Wyjdź
+  app_subtitle: rozkład odjazdów komunikacji publicznej
+  init_modal: Inicjalizacja
+  action_add: Dodaj
+  action_cancel: Anuluj
+  stop_add: Dodaj nowy przystanek
+  stop_add_code: Kod lub nazwa przystanku
+  stop_add_dest: Numer linii lub przystanek końcowy
+  bollard_route: Linia
+  bollard_time: Czas
+  bollard_status: Stan
+  bollard_destination: Przystanek Końcowy
+  bollard_eta: Przyj.
+  bollard_routes_title: Linie
+  static_downloaded: Pobrano %{file}
+  static_parsed: Przetworzono %{file}

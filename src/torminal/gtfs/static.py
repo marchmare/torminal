@@ -1,5 +1,6 @@
 import csv
 import asyncio
+import i18n
 from collections.abc import Awaitable
 from typing import Callable, TypeVar
 from dataclasses import dataclass
@@ -71,21 +72,21 @@ class GTFSStaticLoader:
 
         # fetch static data sources
         await asyncio.gather(
-            self.track(fetch_vehicle_dictionary(), "Downloaded vehicle_dictionary.csv"),
-            self.track(fetch_gtfs_zip(), "Downloaded GTFS archive"),
+            self.track(fetch_vehicle_dictionary(), i18n.t("static_downloaded", file="vehicle_dictionary.csv")),
+            self.track(fetch_gtfs_zip(), i18n.t("static_downloaded", file="GTFS")),
         )
 
         # parse into dataset
         with open_vehicle_dictionary() as vd, open_gtfs_zip() as z:
             results = await asyncio.gather(
-                self.track(asyncio.to_thread(parse_vehicle_dictionary, vd), "Parsed vehicle_dictionary.csv"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, Trip, z), "Parsed trips.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, TripStops, z), "Parsed trip_stops.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, Route, z), "Parsed routes.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, Stop, z), "Parsed stops.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, Shape, z), "Parsed shapes.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, ServiceCalendar, z), "Parsed service.txt"),
-                self.track(asyncio.to_thread(parse_feed_info, z), "Parsed feed_info.txt"),
+                self.track(asyncio.to_thread(parse_vehicle_dictionary, vd), i18n.t("static_parsed", file="vehicle_dictionary.csv")),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Trip, z), i18n.t("static_parsed", file="trips.txt")),
+                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, TripStops, z), i18n.t("static_parsed", file="trip_stops.txt")),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Route, z), i18n.t("static_parsed", file="routes.txt")),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Stop, z), i18n.t("static_parsed", file="stops.txt")),
+                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, Shape, z), i18n.t("static_parsed", file="shapes.txt")),
+                self.track(asyncio.to_thread(parse_txt_as_dict, ServiceCalendar, z), i18n.t("static_parsed", file="service.txt")),
+                self.track(asyncio.to_thread(parse_feed_info, z), i18n.t("static_parsed", file="feed_info.txt")),
             )
 
         vehicles, trips, trip_stops, routes, stops, shapes, service_calendars, feed_info = results

@@ -1,0 +1,21 @@
+en_US:
+  query_add: Add new query
+  query_remove: Remove stops
+  app_options: Options
+  app_about: About
+  app_quit: Quit
+  app_subtitle: public transport departures dashboard
+  init_modal: Initializing
+  action_add: Add
+  action_cancel: Cancel
+  stop_add: Add new stop
+  stop_add_code: Stop name or code
+  stop_add_dest: Route number or destination
+  bollard_route: Route
+  bollard_time: Time
+  bollard_status: Status
+  bollard_destination: Destination
+  bollard_eta: ETA
+  bollard_routes_title: Routes
+  static_downloaded: Downloaded %{file}
+  static_parsed: Parsed %{file}

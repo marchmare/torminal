@@ -17,6 +17,7 @@ from torminal.tui.widgets.bollard import Bollard
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
 from torminal.gtfs.data import BollardMessage
+import i18n
 
 
 class TORminal(App):
@@ -25,11 +26,11 @@ class TORminal(App):
     CSS_PATH = "style.tcss"
     ENABLE_COMMAND_PALETTE = False
     BINDINGS = [
-        ("a", "add_new", "Add new query"),
-        ("r", "remove_stops", "Remove stops"),
-        ("o", "options", "Options"),
-        ("A", "about", "About"),
-        ("ctr+q", "quit", "Quit"),
+        ("a", "add_new", i18n.t("query_add")),
+        ("r", "remove_stops", i18n.t("query_remove")),
+        ("o", "options", i18n.t("app_options")),
+        ("A", "about", i18n.t("app_about")),
+        ("ctr+q", "quit", i18n.t("app_quit")),
     ]
 
     dataset: GTFSStaticFeed
@@ -47,7 +48,7 @@ class TORminal(App):
     async def on_mount(self) -> None:
         self.theme = "gruvbox"
         self.title = "🚋 TORminal"
-        self.sub_title = "public transport departures dashboard"
+        self.sub_title = i18n.t("app_subtitle")
 
         self.dataset = await self.push_screen_wait(LoadingScreen())
 
