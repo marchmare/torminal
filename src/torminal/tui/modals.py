@@ -12,6 +12,8 @@ from torminal.tui.widgets.spinner import Spinner
 from torminal.gtfs.data import Route, Stop
 from asyncio import sleep
 
+import i18n
+
 LOGO = """░▀█▀░█▀█░█▀▄░█▄█░▀█▀░█▀█░█▀█░█░░░
 ░░█░░█░█░█▀▄░█░█░░█░░█░█░█▀█░█░░░
 ░░▀░░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░▀░▀░▀░▀▀▀░"""
@@ -26,7 +28,7 @@ class LoadingScreen(ModalScreen):
             yield ProgressBar(show_eta=False, show_percentage=False)
 
     def on_mount(self) -> None:
-        self.modal.border_title = " Initializing "
+        self.modal.border_title = f" {i18n.t('init_modal')} "
         self.modal.border_subtitle = " 🐐 "
 
         self.load_data()
@@ -79,8 +81,8 @@ class QueryInput(ModalScreen):
         self.routes = [DropdownItem(main=Content.from_markup(r)) for r in routes]
 
     def compose(self) -> ComposeResult:
-        stop_input = Input(placeholder="Stop name or code", id="stop")
-        route_input = Input(placeholder="Route number or destination", id="route")
+        stop_input = Input(placeholder=i18n.t("stop_add_code"), id="stop")
+        route_input = Input(placeholder=i18n.t("stop_add_dest"), id="route")
 
         with Vertical(classes="box"):
             yield stop_input
@@ -90,11 +92,11 @@ class QueryInput(ModalScreen):
             yield AutoComplete(route_input, candidates=self.routes)
 
             with Horizontal(classes="horizontal_buttons"):
-                yield Button("Add", flat=True, id="add")
-                yield Button("Cancel", flat=True, id="cancel")
+                yield Button(i18n.t("action_add"), flat=True, id="add")
+                yield Button(i18n.t("action_cancel"), flat=True, id="cancel")
 
     def on_mount(self) -> None:
-        self.modal.border_title = " Add new stop "
+        self.modal.border_title = f" {i18n.t('torminal.stop_add')} "
         self.modal.border_subtitle = " 🐐 "
 
     def on_button_pressed(self, event: Button.Pressed) -> None:

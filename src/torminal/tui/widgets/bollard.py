@@ -7,6 +7,7 @@ from textual.containers import Vertical, Horizontal
 from torminal.query import QueryMatch, RealtimePollResult, ArrivalTime
 from torminal.gtfs.data import Stop, Route, BollardMessage, VehicleStatus
 from textual.content import Content
+import i18n
 
 route_w = 5
 time_w = 5
@@ -14,11 +15,11 @@ eta_w = 7
 status_w = 7
 
 COLUMNS = [
-    ("Route", "route", route_w),
-    ("Time", "time", time_w),
-    (f"{'ETA':>{eta_w}}", "eta", eta_w),
-    ("Status", "status", status_w),
-    ("Destination", "destination", None),
+    (i18n.t("bollard_route"), "route", route_w),
+    (i18n.t("bollard_time"), "time", time_w),
+    (f"{i18n.t("bollard_eta"):>{eta_w}}", "eta", eta_w),
+    (i18n.t("bollard_status"), "status", status_w),
+    (i18n.t("bollard_destination"), "destination", None),
 ]
 
 
@@ -123,7 +124,9 @@ class Bollard(Vertical):
     def update_routes(self) -> None:
         """Update text displayed in Routes: label, uses Routes stored in 'self.routes'"""
 
-        self.routes_label.content = f"Routes: {format_routes(self.routes)}" if self.routes else ""
+        self.routes_label.content = (
+            f"{i18n.t('bollard_routes_title')}: {format_routes(self.routes)}" if self.routes else ""
+        )
 
     def update_datatable(self, polls: list[RealtimePollResult]) -> None:
         """
