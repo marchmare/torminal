@@ -147,28 +147,27 @@ class Monitor:
         if not stop or not route or not service:
             return matches
 
-        for trip in self.dataset.trips.values():
-            # filter out trips with not matching routes and not matching calendars
-            if trip.route_id != route.id or trip.service_id != service.id:
+        # iterate over dataset filtered by stop and route IDs
+        for trip, stop_time in self.dataset.stop_route_index[stop.id][route.id]:
+            # filter out trips with not not matching calendars
+            if trip.service_id != service.id:
+                continue
+            # filter out stop_times not within time window
+            if not self.check_arrival_within_window(stop_time.arrival_time):
                 continue
 
-            for stop_time in self.dataset.trip_stops[trip.id].items:
-                # filter out stop times with not matching stops and outside time window
-
-                if not stop.id == stop_time.stop_id or not self.check_arrival_within_window(stop_time.arrival_time):
-                    continue
-                shape = self.dataset.shapes.get(trip.shape_id, None)
-                matches.append(
-                    QueryMatch(
-                        trip=trip,
-                        stop_time=stop_time,
-                        stop=stop,
-                        route=route,
-                        shape=shape,
-                        service=service,
-                        planned_arrival=stop_time.arrival_time,
-                    )
+            shape = self.dataset.shapes.get(trip.shape_id, None)
+            matches.append(
+                QueryMatch(
+                    trip=trip,
+                    stop_time=stop_time,
+                    stop=stop,
+                    route=route,
+                    shape=shape,
+                    service=service,
+                    planned_arrival=stop_time.arrival_time,
                 )
+            )
         return matches
 
     @staticmethod

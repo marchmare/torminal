@@ -1,8 +1,9 @@
 import csv
 import asyncio
 from collections.abc import Awaitable
+from collections import defaultdict
 from typing import Callable, TypeVar
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from csv import DictReader
 from zipfile import ZipFile
 from io import TextIOWrapper
@@ -20,6 +21,7 @@ from torminal.gtfs.data import (
     Vehicle,
     GroupModel,
     Model,
+    StopTime,
 )
 
 
@@ -27,12 +29,34 @@ from torminal.gtfs.data import (
 class GTFSStaticFeed:
     vehicles: dict[str, Vehicle]
     trips: dict[str, Trip]
-    trip_stops: dict[str, TripStops]
+    _trip_stops: dict[str, TripStops] = field(init=True, repr=False)  # deleted in __post_init__
     routes: dict[str, Route]
-    stops: dict[str, Stop]
+    stops: dict[str, Stop]  # stops by ID
     shapes: dict[str, Shape]
     service_calendars: dict[str, ServiceCalendar]
     feed_info: FeedInfo
+    stops_by_code: dict[str, Stop] = field(init=False)
+    stop_route_index: dict[Stop, dict[Route, tuple[Trip, StopTime]]] = field(init=False)
+
+    def __post_init__(self) -> None:
+        self.stop_route_index: dict[str, dict[str, list[tuple[Trip, StopTime]]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+
+        for trip in self.trips.values():
+            # map trip_stops to trip
+            trip_stops = self._trip_stops.get(trip.id, None)
+            if trip_stops:
+                trip.stop_times = trip_stops.items
+
+            # prepare stop_route_index
+            route = self.routes.get(trip.route_id)
+            if not route:
+                continue
+            for stop_time in trip.stop_times:
+                self.stop_route_index[stop_time.stop_id][route.id].append((trip, stop_time))
+
+        del self._trip_stops
 
 
 @dataclass
@@ -95,7 +119,7 @@ class GTFSStaticLoader:
         gtfs_static_lookup = GTFSStaticFeed(
             vehicles=vehicles,
             trips=trips,
-            trip_stops=trip_stops,
+            _trip_stops=trip_stops,
             routes=routes,
             stops=stops,
             shapes=shapes,

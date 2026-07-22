@@ -235,45 +235,6 @@ class FeedInfo:
 
 
 @dataclass
-class Trip(Model):
-    """
-    Trip data parsed from trips.txt.
-    Defines individual vehicle journeys associated with routes and services.
-    A trip is a scheduled journey of a vehicle along a route and is identified by a unique `Trip ID`.
-    `Trip ID` stores legend markers and trip variant info:
-
-        1_11316657   ^   P,G:2:8   +
-        ──────────       ───────   ─
-        trip_id base     markers   main variant
-    """
-
-    _gtfs_file = "trips.txt"
-    _key = "trip_id"
-
-    id: str
-    route_id: str
-    shape_id: str
-    service_id: str
-    headsign: str
-    direction: Direction
-    is_wheelchair_accessible: bool
-    brigade: int
-
-    @classmethod
-    def from_dict(cls, row: dict[str, str]) -> Self:
-        return cls(
-            id=row["trip_id"],
-            route_id=row["route_id"],
-            shape_id=row["shape_id"],
-            service_id=row["service_id"],
-            headsign=row["trip_headsign"],
-            direction=Direction(int(row["direction_id"])),
-            is_wheelchair_accessible=bool(int(row["wheelchair_accessible"])),
-            brigade=int(row["brigade"]),
-        )
-
-
-@dataclass
 class ShapePoint(Model):
     """
     Single point of a trip shape, represented as geographic location.
@@ -374,6 +335,46 @@ class StopTime(Model):
             stop_id=row["stop_id"],
             pickup_type=DropoffPickupType(int(row["pickup_type"])),
             drop_off_type=DropoffPickupType(int(row["drop_off_type"])),
+        )
+
+
+@dataclass
+class Trip(Model):
+    """
+    Trip data parsed from trips.txt.
+    Defines individual vehicle journeys associated with routes and services.
+    A trip is a scheduled journey of a vehicle along a route and is identified by a unique `Trip ID`.
+    `Trip ID` stores legend markers and trip variant info:
+
+        1_11316657   ^   P,G:2:8   +
+        ──────────       ───────   ─
+        trip_id base     markers   main variant
+    """
+
+    _gtfs_file = "trips.txt"
+    _key = "trip_id"
+
+    id: str
+    route_id: str
+    shape_id: str
+    service_id: str
+    headsign: str
+    direction: Direction
+    is_wheelchair_accessible: bool
+    brigade: int
+    stop_times: list[StopTime] = field(init=False)
+
+    @classmethod
+    def from_dict(cls, row: dict[str, str]) -> Self:
+        return cls(
+            id=row["trip_id"],
+            route_id=row["route_id"],
+            shape_id=row["shape_id"],
+            service_id=row["service_id"],
+            headsign=row["trip_headsign"],
+            direction=Direction(int(row["direction_id"])),
+            is_wheelchair_accessible=bool(int(row["wheelchair_accessible"])),
+            brigade=int(row["brigade"]),
         )
 
 
