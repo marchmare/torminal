@@ -266,7 +266,8 @@ class Monitor:
     ) -> RealtimePollResult:
         """Find upcoming arrivals for the query, that will occur within specified time window."""
 
-        print(f"Polling {query.stop.code} {query.route.id}")
+        stop = self.dataset.stops.get(query.stop_time.stop_id)
+        print(f"Polling {stop.code} {query.trip.route_id}")
 
         timestamp = int(datetime.timestamp(datetime.now()))
         history_entry = (timestamp, None, None)
@@ -316,6 +317,6 @@ class Monitor:
             status=status,
             velocity=velocity,
             vehicle=query.vehicle.id if query.vehicle else None,
-            route_id=query.route.id,
+            route_id=query.trip.route_id,
             destination=query.trip.headsign,
         )

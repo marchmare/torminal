@@ -1,11 +1,16 @@
-import re
-from typing import Any, Generator
+from __future__ import annotations
 
-from textual.reactive import reactive
-from textual.widgets import Static, Label, DataTable, Link
-from textual.containers import Vertical, Horizontal
-from torminal.query import QueryMatch, RealtimePollResult, ArrivalTime
+import re
+from typing import TYPE_CHECKING, Any, Generator
+
+from textual.widgets import Label, DataTable, Link
+from textual.containers import Vertical
+from torminal.query import RealtimePollResult, ArrivalTime
 from torminal.gtfs.data import Stop, Route, BollardMessage, VehicleStatus
+
+if TYPE_CHECKING:
+    from torminal.query import Monitor
+
 from textual.content import Content
 
 route_w = 5
@@ -95,10 +100,10 @@ def format_delay(arrival_time: ArrivalTime) -> str:
 class Bollard(Vertical):
     """Widget representing bollard gathering informations from a single stop"""
 
-    def __init__(self, stop: Stop | str, routes: list[Route | str] = []) -> None:
+    def __init__(self, stop: Stop, monitor: Monitor) -> None:
         super().__init__()
         self.stop = stop
-        self.routes: list[Route] = []
+        self.monitor = monitor
 
     def compose(self) -> Generator[Label, Any, None]:
         yield Label(classes="routes")
@@ -121,9 +126,11 @@ class Bollard(Vertical):
         self.update_routes()
 
     def update_routes(self) -> None:
-        """Update text displayed in Routes: label, uses Routes stored in 'self.routes'"""
+        """Update text displayed in Routes label, derived from monitor's queries mapping."""
 
-        self.routes_label.content = f"Routes: {format_routes(self.routes)}" if self.routes else ""
+        route_ids = self.monitor.queries.get(self.stop.code, {}).keys()
+        routes = [self.monitor.dataset.routes.get(rid, rid) for rid in route_ids]
+        self.routes_label.content = f"Routes: {format_routes(routes)}" if routes else ""
 
     def update_datatable(self, polls: list[RealtimePollResult]) -> None:
         """

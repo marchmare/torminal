@@ -3,11 +3,10 @@
 import asyncio
 from textual import work
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header, Static
+from textual.widgets import Footer, Header
 from textual.containers import Grid
 from httpx import ConnectTimeout, ConnectError
 from collections import defaultdict
-from datetime import datetime
 from torminal.gtfs.static import GTFSStaticFeed
 from torminal.query import QueryKey, Monitor, RealtimePollResult
 from torminal.config import config, Config
@@ -16,7 +15,6 @@ from torminal.tui.modals import LoadingScreen, QueryInput, get_markup_routes, ge
 from torminal.tui.widgets.bollard import Bollard
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
-from torminal.gtfs.data import BollardMessage, Stop
 
 
 class TORminal(App):
@@ -94,8 +92,11 @@ class TORminal(App):
             await asyncio.sleep(config.peka_poll_interval)
 
     async def _fetch_all_peka(self) -> dict[str, PEKARealTimeFeed]:
-        """Helper method to prepare dictionary of PEKA feeds for each stop in matched queries"""
-        peka_tasks = {stop: fetch_peka_vm_feed(stop) for stop in self.monitor.queries.keys() if isinstance(stop, Stop)}
+        """Fetch PEKA virtual monitor feeds for each stop in monitored queries."""
+        peka_tasks = {
+            stop_code: fetch_peka_vm_feed(self.dataset.stops_by_code.get(stop_code))
+            for stop_code in self.monitor.queries
+        }
         peka_results = await asyncio.gather(*peka_tasks.values())
         return dict(zip(peka_tasks.keys(), peka_results))
 
@@ -103,17 +104,20 @@ class TORminal(App):
         if not self._gtfs_rt_cache:
             return
 
+        results_by_stop: dict[str, list[RealtimePollResult]] = defaultdict(list)
         for stop_code, poll_result in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
-            print(poll_result)
+            results_by_stop[stop_code].append(poll_result)
+
+        for stop_code, results in results_by_stop.items():
             if bollard := self._bollards.get(stop_code):
-                bollard.update_datatable(poll_result)
-                bollard.update_message(poll_result[0].message)
+                bollard.update_datatable(results)
+                bollard.update_message(results[0].message)
 
     async def add_new_from_config(self) -> None:
         """Load queries from config and put them on dashboard"""
 
         for query in config.queries:
-            await self._add_new(QueryKey(query[0], query[1]))
+            await self._add_new(QueryKey.from_config(query))
 
     @work
     async def action_add_new(self) -> None:
@@ -130,23 +134,19 @@ class TORminal(App):
     async def _add_new(self, query: QueryKey) -> None:
         """Add query to dashboard"""
 
-        # update Monitor with the query
         self.monitor.add_query(query)
 
-        # update dashboard
-        stop = self.dataset.stops.get(query.stop_code)
-        route = self.dataset.routes.get(query.route_id)
-
-        # if Bollard for this stop already exists
-        if bollard := self._bollards.get(query.stop_code, None):
-            if route not in bollard.routes:
-                bollard.routes.append(query.route_id)
+        # if Bollard for this stop already exists, just refresh its routes
+        if bollard := self._bollards.get(query.stop_code):
             bollard.update_routes()
             return
 
         # if new Bollard needs to be added
-        new_bollard = Bollard(stop)
-        new_bollard.routes.append(route)
+        stop = self.dataset.stops_by_code.get(query.stop_code)
+        if not stop:
+            return
+
+        new_bollard = Bollard(stop, self.monitor)
         self._bollards[stop.code] = new_bollard
         await self.dashboard.mount(new_bollard)
 
