@@ -27,80 +27,19 @@ COLUMNS = [
 ]
 
 
-def format_eta(eta: int) -> str:
-    """Get ETA minutes string formatted with unit and <, > information."""
-    if eta < 1:
-        return f'{"<1 min":>{eta_w}}'
-    if eta > 60:
-        return f'{">60 min":>{eta_w}}'
-    return f"{f'{eta} min':>{eta_w}}"
+class UnavailableStop:
+    """Empty stop to use when Stop is not found in the dataset."""
 
-
-def sort_eta(eta: str) -> int:
-    """ETA value sorter function for datatable."""
-    if eta.startswith("<"):
-        return 0
-    if eta.startswith(">"):
-        return 61
-
-    match = re.search(r"\d+", eta)
-    return int(match.group()) if match else 999
-
-
-def format_status(status: VehicleStatus) -> str | Content:
-    """Get formatted status string."""
-    match status:
-        case VehicleStatus.ON_TIME:
-            return f"{f'🛜':^{status_w}}"
-        case VehicleStatus.SLIGHTLY_DELAYED:
-            return Content.from_markup("DELAY")
-        case VehicleStatus.DELAYED:
-            return Content.from_markup("[bold]DELAY[/]")
-        case VehicleStatus.EARLY:
-            return Content.from_markup("EARLY")
-        case VehicleStatus.DETOURED:
-            return Content.from_markup("[bold]DETOUR[/]")
-        case VehicleStatus.STUCK:
-            return Content.from_markup("[bold]STUCK[/]")
-        case VehicleStatus.AT_TERMINUS:
-            return f"{f'🛜':^{status_w}}"
-        case VehicleStatus.NO_RT:
-            return ""
-
-
-def format_title(stop: Stop | str) -> Content:
-    """Prepare formatted stop data string to be used in Bollard's border title."""
-    if isinstance(stop, Stop):
-        return Content.from_markup(f"[italic]({stop.code})[/] {stop.name}")
-    else:
-        return Content.from_markup(f"[italic]({stop})[/] Stop unavailable")
-
-
-def format_routes(routes: list[Route | str]) -> Content:
-    """Prepare string of comma-separated route IDs and colored depending on being resolved into Route objects or not."""
-    _formatted_routes = []
-    for route in routes:
-        if isinstance(route, Route):
-            _formatted_routes.append(route.id)
-        else:
-            _formatted_routes.append(Content.from_markup(f"[$text 50%]{route.id}[/]"))
-    return ", ".join(_formatted_routes)
-
-
-def format_delay(arrival_time: ArrivalTime) -> str:
-    """Get delay string with units"""
-    sign = "+" if arrival_time.delay > 0 else ""
-    delay_min = arrival_time.delay // 60
-    delay = delay_min if delay_min < 99 else 99
-    if delay > 5:
-        return f"{sign}[$warning bold]{delay}[/] min"
-    return f"{sign}{delay} min"
+    def __init__(self, code: str) -> None:
+        self.id: str = "n/a"
+        self.code: str = code
+        self.name: str = "Stop unavailable"
 
 
 class Bollard(Vertical):
     """Widget representing bollard gathering informations from a single stop"""
 
-    def __init__(self, stop: Stop, monitor: Monitor) -> None:
+    def __init__(self, stop: Stop | UnavailableStop, monitor: Monitor) -> None:
         super().__init__()
         self.stop = stop
         self.monitor = monitor
@@ -117,20 +56,20 @@ class Bollard(Vertical):
             self.table.add_column(column[0], key=column[1], width=column[2])
         self.table.cursor_type = "row"
 
-        # hide bollard info t init
+        # hide bollard info on init
         self.message_label.display = False
         self.message_link.display = False
 
         # update stop and routes data
-        self.border_title = format_title(self.stop)
+        self.border_title = self.format_title(self.stop)
         self.update_routes()
+        if isinstance(self.stop, UnavailableStop):
+            self.disabled = True
 
     def update_routes(self) -> None:
         """Update text displayed in Routes label, derived from monitor's queries mapping."""
-
-        route_ids = self.monitor.queries.get(self.stop.code, {}).keys()
-        routes = [self.monitor.dataset.routes.get(rid, rid) for rid in route_ids]
-        self.routes_label.content = f"Routes: {format_routes(routes)}" if routes else ""
+        route_ids = self.monitor.queries.get(self.stop.code, {})
+        self.routes_label.content = self.format_routes(route_ids)
 
     def update_datatable(self, polls: list[RealtimePollResult]) -> None:
         """
@@ -158,18 +97,18 @@ class Bollard(Vertical):
                 (
                     poll.route_id,
                     poll.planned_arrival.time.strftime("%H:%M"),
-                    format_eta(eta),
+                    self.format_eta(eta),
                     (
-                        format_delay(poll.realtime_arrival)
+                        self.format_delay(poll.realtime_arrival)
                         if poll.realtime_arrival and is_off_schedule(poll.status)
-                        else format_status(poll.status)
+                        else self.format_status(poll.status)
                     ),
                     poll.destination,
                 )
             )
 
         self.table.add_rows(rows)
-        self.table.sort("eta", key=sort_eta)
+        self.table.sort("eta", key=self.sort_eta)
         self.table.cursor_coordinate = _cursor
 
     def update_message(self, message: BollardMessage | None = None) -> None:
@@ -198,3 +137,73 @@ class Bollard(Vertical):
     @property
     def routes_label(self) -> Label:
         return self.query_one(".routes", Label)
+
+    @staticmethod
+    def format_eta(eta: int) -> str:
+        """Get ETA minutes string formatted with unit and <, > information."""
+        if eta < 1:
+            return f'{"<1 min":>{eta_w}}'
+        if eta > 60:
+            return f'{">60 min":>{eta_w}}'
+        return f"{f'{eta} min':>{eta_w}}"
+
+    @staticmethod
+    def sort_eta(eta: str) -> int:
+        """ETA value sorter function for datatable."""
+        if eta.startswith("<"):
+            return 0
+        if eta.startswith(">"):
+            return 61
+
+        match = re.search(r"\d+", eta)
+        return int(match.group()) if match else 999
+
+    @staticmethod
+    def format_status(status: VehicleStatus) -> str | Content:
+        """Get formatted status string."""
+        match status:
+            case VehicleStatus.ON_TIME:
+                return f"{f'((o))':^{status_w}}"
+            case VehicleStatus.SLIGHTLY_DELAYED:
+                return Content.from_markup("DELAY")
+            case VehicleStatus.DELAYED:
+                return Content.from_markup("[bold]DELAY[/]")
+            case VehicleStatus.EARLY:
+                return Content.from_markup("EARLY")
+            case VehicleStatus.DETOURED:
+                return Content.from_markup("[bold]DETOUR[/]")
+            case VehicleStatus.STUCK:
+                return Content.from_markup("[bold]STUCK[/]")
+            case VehicleStatus.AT_TERMINUS:
+                return f"{f'((o))':^{status_w}}"
+            case VehicleStatus.NO_RT:
+                return ""
+
+    @staticmethod
+    def format_title(stop: Stop | UnavailableStop) -> Content:
+        """Prepare formatted stop data string to be used in Bollard's border title."""
+
+        return Content.from_markup(f"[italic]({stop.code})[/] {stop.name}")
+
+    def format_routes(self, routes: list[str]) -> Content:
+        """Prepare string of comma-separated route IDs and colored depending on being resolved into Route objects or not."""
+        _formatted_routes = []
+        for route in routes:
+            if self.monitor.validate_stop_on_route(self.stop.code, route):
+                print(f"Route {route} belongs on {self.stop}")
+                _formatted_routes.append(route)
+            else:
+                print(f"Route {route} doesn't belong on {self.stop}")
+                _formatted_routes.append(f"[$text 25%]{route}[/]")
+
+        return Content.from_markup(f"Routes: {", ".join(_formatted_routes)}") if routes else ""
+
+    @staticmethod
+    def format_delay(arrival_time: ArrivalTime) -> str:
+        """Get delay string with units"""
+        sign = "+" if arrival_time.delay > 0 else ""
+        delay_min = arrival_time.delay // 60
+        delay = delay_min if delay_min < 99 else 99
+        if delay > 5:
+            return Content.from_markup(f"[$warning bold]{sign}{delay} min[/]")
+        return f"{sign}{delay} min"

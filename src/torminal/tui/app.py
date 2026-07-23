@@ -12,9 +12,10 @@ from torminal.query import QueryKey, Monitor, RealtimePollResult
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.tui.modals import LoadingScreen, QueryInput, get_markup_routes, get_markup_stops
-from torminal.tui.widgets.bollard import Bollard
+from torminal.tui.widgets.bollard import Bollard, UnavailableStop
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
+from torminal.gtfs.data import Stop
 
 
 class TORminal(App):
@@ -63,10 +64,7 @@ class TORminal(App):
 
     @work
     async def _poll_gtfs_rt(self) -> None:
-        """
-        Get GTFS realtime feeds using interval determined by 'config.gtfs_rt_poll_interval'
-        and prepare results.
-        """
+        """Get GTFS realtime feeds using interval determined by 'config.gtfs_rt_poll_interval' and prepare results."""
         while True:
             try:
                 self._gtfs_rt_cache = await fetch_gtfs_rt_feed()
@@ -78,10 +76,7 @@ class TORminal(App):
 
     @work
     async def _poll_peka(self) -> None:
-        """
-        Get PEKA virtual monitor feed using interval determined by 'config.peka_poll_interval'
-        and prepare results.
-        """
+        """Get PEKA virtual monitor feed using interval determined by 'config.peka_poll_interval' and prepare results."""
         while True:
             try:
                 self._peka_cache = await self._fetch_all_peka()
@@ -144,7 +139,7 @@ class TORminal(App):
         # if new Bollard needs to be added
         stop = self.dataset.stops_by_code.get(query.stop_code)
         if not stop:
-            return
+            stop = UnavailableStop(query.stop_code)
 
         new_bollard = Bollard(stop, self.monitor)
         self._bollards[stop.code] = new_bollard
