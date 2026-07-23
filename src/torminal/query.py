@@ -25,7 +25,7 @@ from torminal.gtfs.data import (
 )
 
 
-class Query:
+class QueryKey:
     """Class representing a single stop-line query to get resolved."""
 
     def __init__(self, stop_code: str, route_id: str | int) -> None:
@@ -35,6 +35,11 @@ class Query:
     def to_config(self) -> list[str, str]:
         """Convert to [stop_code, route_id] list, for use with config"""
         return [self.stop_code, self.route_id]
+
+    @classmethod
+    def from_config(cls, query: list[str, str]) -> Self:
+        """Return a Query based on list parsed from config"""
+        return cls(*query)
 
     @classmethod
     def from_input(cls, stop_input: str, route_input: str) -> Self | None:
@@ -61,26 +66,13 @@ class Query:
 
 @dataclass
 class QueryMatch:
-    """Class representing a query that got resolved and got entities assigned from the GTFS dataset."""
+    """Class representing mutable query data."""
 
-    # data that can be assigned or derived at init and from static dataset
-    trip: Trip
-    stop_time: StopTime
-    stop: Stop
-    route: Route
-    shape: Shape
-    service: ServiceCalendar
-    planned_arrival: datetime
-
-    # below data can be obtained during first poll for RT data
-    # data that is static during the entire trip but requires initial RT data access
+    trip: Trip  # stores Trip, Stop Times, Shape, Route, Service calendar
+    stop_time: StopTime  # stores Stop, arrival time
     vehicle: Vehicle | None = None
-    position_history: deque[tuple[int, int | None, Point | None]] = field(default_factory=lambda: deque(maxlen=5))
-    velocity_history: list[tuple[int, float | None]] = field(default_factory=list)
-
-    def to_config(self) -> list[str, str]:
-        """Convert to [stop_code, route_id] list, for use with config"""
-        return [self.stop.code, self.route.id]
+    position_history: deque = field(default_factory=lambda: deque(maxlen=5))
+    velocity_history: list[tuple[int, float]] = field(default_factory=list)
 
 
 @dataclass
@@ -104,71 +96,53 @@ class Monitor:
 
     def __init__(self, datset: GTFSStaticFeed) -> None:
         self.dataset = datset
-        self.time_window = config.time_window
-        self.matched_queries: dict[str, list[QueryMatch]] = defaultdict(list)
+        self.queries: dict[Stop | str, dict[Route | str, list[QueryMatch]]] = {}
 
-    def add_query(self, query: Query) -> None:
-        """Add query operation - adds query to config if it yields matches, returns resolved QueryMatches"""
+    def add_query(self, query: QueryKey) -> None:
+        """Add query to config and to queries mapping."""
 
-        matches = self.resolve_query(query)
-        if not matches:
-            return
+        # maintain queries mapping
+        self.resolve_query(query)
 
+        # maintain config
         config.add_query(query.to_config())
 
-        for match in matches:
-            self.matched_queries[match.stop.code].append(match)
-            print(f"Appended {match.trip.id}")
-
-    def remove_query(self, query: Query) -> None:
+    def remove_query(self, query: QueryKey) -> None:
         """Remove query operation - removes query from config"""
 
+        # maintain queries mapping
+        if stop_queries := self.queries.get(query.stop_code):
+            stop_queries.pop(query.route_id, None)
+
+            if not stop_queries:
+                del self.queries[query.stop_code]
+
+        # maintain config
         config.remove_query(query.to_config())
 
-        if query.stop_code in self.matched_queries:
+    def resolve_query(self, query: QueryKey) -> bool:
+        """
+        Find matching trips for the Query and appends it to self.queries mapping.
+        Returns True if new query is added successfully.
+        This method populates queries dictionary with all possible trip and stop time matches
+        that can occur for given stop and route combination.
+        """
 
-            self.matched_queries[query.stop_code] = [
-                match for match in self.matched_queries[query.stop_code] if match.route.id != query.route_id
-            ]
+        stop_queries = self.queries.setdefault(query.stop_code, {})
+        matches = stop_queries.setdefault(query.route_id, [])
 
-            if not self.matched_queries[query.stop_code]:
-                del self.matched_queries[query.stop_code]
+        dataset = self.dataset.stop_route_index.get(query.stop_code, {}).get(query.route_id, [])
+        matches.extend(QueryMatch(trip, stop_time) for trip, stop_time in dataset)
 
-    def resolve_query(self, query: Query) -> list[QueryMatch]:
-        """Find matching trips for the Query."""
+        return bool(matches)
 
-        matches: list[QueryMatch] = []
+    def validate_stop_exists(self, stop_code: str) -> bool:
+        """Validate if Stop exists in current GTFS static dataset"""
+        return stop_code in self.dataset.stops
 
-        # determine stop and route data from lookup, resolve calendar
-        stop = self.dataset.stops.get(query.stop_code, None)
-        route = self.dataset.routes.get(query.route_id, None)
-        service = resolve_service_calendar(self.dataset)
-
-        if not stop or not route or not service:
-            return matches
-
-        # iterate over dataset filtered by stop and route IDs
-        for trip, stop_time in self.dataset.stop_route_index[stop.id][route.id]:
-            # filter out trips with not not matching calendars
-            if trip.service_id != service.id:
-                continue
-            # filter out stop_times not within time window
-            if not self.check_arrival_within_window(stop_time.arrival_time):
-                continue
-
-            shape = self.dataset.shapes.get(trip.shape_id, None)
-            matches.append(
-                QueryMatch(
-                    trip=trip,
-                    stop_time=stop_time,
-                    stop=stop,
-                    route=route,
-                    shape=shape,
-                    service=service,
-                    planned_arrival=stop_time.arrival_time,
-                )
-            )
-        return matches
+    def validate_stop_on_route(self, stop_code: str, route_id: str) -> bool:
+        """Validate if Stop belongs to a Route"""
+        return route_id in self.dataset.stop_route_index.get(stop_code, {})
 
     @staticmethod
     def resolve_closest_stop(
@@ -193,7 +167,7 @@ class Monitor:
         if not stop_time_update:
             return None
 
-        summed_delay_dt = query.planned_arrival + timedelta(
+        summed_delay_dt = query.stop_time.arrival_time + timedelta(
             seconds=stop_time_update.arrival.delay if stop_time_update else 0
         )
         return ArrivalTime(summed_delay_dt, stop_time_update.arrival.delay)
@@ -225,7 +199,9 @@ class Monitor:
         def is_vehicle_detoured(query: QueryMatch, rt_vehicle_pos: VehiclePosition) -> bool:
             """Check if vehicle is in 100m proximity from the trip shape."""
             position = gps_point(rt_vehicle_pos.position.longitude, rt_vehicle_pos.position.latitude)
-            return not query.shape.path.contains(position)
+            if shape := self.dataset.shapes.get(query.trip.shape_id):
+                return not shape.path.contains(position)
+            return False
 
         status = VehicleStatus.NO_RT
         delay = 0
@@ -260,16 +236,26 @@ class Monitor:
         self,
         rt_feed: GTFSRealTimeFeed,
         peka_feeds: dict[str, PEKARealTimeFeed | None],
-    ) -> Generator[RealtimePollResult, None, None]:
+    ) -> Generator[tuple[str, RealtimePollResult], None, None]:
         """Poll all matched queries and yield results."""
 
-        for stop, stop_matches in self.matched_queries.items():
-            rt_msg = peka_feeds.get(stop)
+        service = resolve_service_calendar(self.dataset)
 
-            for match in stop_matches:
-                rt_tu = rt_feed.trip_updates.get(match.trip.id)
-                rt_vp = rt_feed.vehicle_positions.get(match.trip.id)
-                yield (stop, self.poll(match, rt_tu, rt_vp, rt_msg))
+        for stop_code, routes in self.queries.items():
+            rt_msg = peka_feeds.get(stop_code)
+
+            for route_id, query_matches in routes.items():
+                for match in query_matches:
+                    if match.trip.service_id != service.id:
+                        continue  # skip trips not matching service calendar
+
+                    if not self.check_arrival_within_window(match.stop_time.arrival_time):
+                        continue  # skip stop times outside configured time window
+
+                    rt_tu = rt_feed.trip_updates.get(match.trip.id)
+                    rt_vp = rt_feed.vehicle_positions.get(match.trip.id)
+
+                    yield (stop_code, self.poll(match, rt_tu, rt_vp, rt_msg))
 
     def poll(
         self,
@@ -280,7 +266,7 @@ class Monitor:
     ) -> RealtimePollResult:
         """Find upcoming arrivals for the query, that will occur within specified time window."""
 
-        print(f"Polling {query.stop.id} {query.route.id}")
+        print(f"Polling {query.stop.code} {query.route.id}")
 
         timestamp = int(datetime.timestamp(datetime.now()))
         history_entry = (timestamp, None, None)
@@ -290,7 +276,7 @@ class Monitor:
         position = None
         realtime_arrival = None
         current_stop = None
-        planned_arrival = ArrivalTime(query.planned_arrival)
+        planned_arrival = ArrivalTime(query.stop_time.arrival_time)
 
         # get data related to vehicle position GTFS-RT feed
         if rt_vehicle_pos:
@@ -316,6 +302,8 @@ class Monitor:
             message = BollardMessages.from_dict(rt_messages.message).get_current()
 
         status = self.determine_status(query, rt_trip_update, rt_vehicle_pos)
+
+        # update persisiting QueryMatch data
         query.position_history.append(history_entry)
         query.velocity_history.append(velocity_entry)
 

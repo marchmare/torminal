@@ -32,9 +32,8 @@ class ArrivalTime:
         return int(delta.total_seconds() // 60)
 
 
-def resolve_service_calendar(dataset: GTFSStaticFeed) -> ServiceCalendar | None:
+def resolve_service_calendar(dataset) -> ServiceCalendar | None:
     """Get service calendar object for today's weekday."""
-
     current_weekday = datetime.today().weekday()
 
     for service in dataset.service_calendars.values():

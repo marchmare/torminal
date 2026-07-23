@@ -1,5 +1,12 @@
 """Python GTFS data models."""
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from torminal.gtfs.static import GTFSStaticFeed
+    from torminal.query import QueryKey
+
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 from typing import Literal, TypeVar, Self, ClassVar, Generic, Any
@@ -252,7 +259,7 @@ class ShapePoint(Model):
         return cls(sequence=int(row["shape_pt_sequence"]), point=gps_point(longitude, latitude))
 
 
-@dataclass
+@dataclass(frozen=True)
 class Route(Model):
     """
     Route data parsed from routes.txt.
@@ -283,7 +290,7 @@ class Route(Model):
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Stop(Model):
     """
     Stop data parsed from stops.txt.
@@ -291,7 +298,7 @@ class Stop(Model):
     """
 
     _gtfs_file = "stops.txt"
-    _key = "stop_code"
+    _key = "stop_id"
 
     id: str
     code: str
@@ -337,6 +344,10 @@ class StopTime(Model):
             drop_off_type=DropoffPickupType(int(row["drop_off_type"])),
         )
 
+    def stop(self, dataset: GTFSStaticFeed) -> Stop | str:
+        """Get StopTimes's stop object from dataset, returns string code if not found"""
+        return dataset.stops.get(self.stop_id, self.stop_code)
+
 
 @dataclass
 class Trip(Model):
@@ -376,6 +387,18 @@ class Trip(Model):
             is_wheelchair_accessible=bool(int(row["wheelchair_accessible"])),
             brigade=int(row["brigade"]),
         )
+
+    def route(self, dataset: GTFSStaticFeed) -> Route | str:
+        """Get Trip's route object from dataset, returns string ID if not found"""
+        return dataset.routes.get(self.route_id, self.route_id)
+
+    def shape(self, dataset: GTFSStaticFeed) -> Shape | str:
+        """Get Trip's shape object from dataset, returns string ID if not found"""
+        return dataset.shapes.get(self.shape_id, self.shape_id)
+
+    def service(self, dataset: GTFSStaticFeed) -> ServiceCalendar | str:
+        """Get Trip's service calendar object from dataset, returns string ID if not found"""
+        return dataset.service_calendars.get(self.service_id, self.service_id)
 
 
 @dataclass

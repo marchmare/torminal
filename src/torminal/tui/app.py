@@ -9,14 +9,14 @@ from httpx import ConnectTimeout, ConnectError
 from collections import defaultdict
 from datetime import datetime
 from torminal.gtfs.static import GTFSStaticFeed
-from torminal.query import Query, Monitor, RealtimePollResult
+from torminal.query import QueryKey, Monitor, RealtimePollResult
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.tui.modals import LoadingScreen, QueryInput, get_markup_routes, get_markup_stops
 from torminal.tui.widgets.bollard import Bollard
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
-from torminal.gtfs.data import BollardMessage
+from torminal.gtfs.data import BollardMessage, Stop
 
 
 class TORminal(App):
@@ -95,9 +95,7 @@ class TORminal(App):
 
     async def _fetch_all_peka(self) -> dict[str, PEKARealTimeFeed]:
         """Helper method to prepare dictionary of PEKA feeds for each stop in matched queries"""
-        peka_tasks = {
-            stop: fetch_peka_vm_feed(self.monitor.dataset.stops.get(stop)) for stop in self.monitor.matched_queries
-        }
+        peka_tasks = {stop: fetch_peka_vm_feed(stop) for stop in self.monitor.queries.keys() if isinstance(stop, Stop)}
         peka_results = await asyncio.gather(*peka_tasks.values())
         return dict(zip(peka_tasks.keys(), peka_results))
 
@@ -105,21 +103,17 @@ class TORminal(App):
         if not self._gtfs_rt_cache:
             return
 
-        results: dict[str, list[RealtimePollResult]] = defaultdict(list)
         for stop_code, poll_result in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
             print(poll_result)
-            results[stop_code].append(poll_result)
-
-        for stop_code, polls in results.items():
             if bollard := self._bollards.get(stop_code):
-                bollard.update_datatable(polls)
-                bollard.update_message(polls[0].message)
+                bollard.update_datatable(poll_result)
+                bollard.update_message(poll_result[0].message)
 
     async def add_new_from_config(self) -> None:
         """Load queries from config and put them on dashboard"""
 
         for query in config.queries:
-            await self._add_new(Query(query[0], query[1]))
+            await self._add_new(QueryKey(query[0], query[1]))
 
     @work
     async def action_add_new(self) -> None:
@@ -130,10 +124,10 @@ class TORminal(App):
         routes = get_markup_routes(list(self.dataset.routes.values()))
         stop_input, route_input = await self.push_screen_wait(QueryInput(stops, routes))
 
-        if query := Query.from_input(stop_input, route_input):
+        if query := QueryKey.from_input(stop_input, route_input):
             await self._add_new(query)
 
-    async def _add_new(self, query: Query) -> None:
+    async def _add_new(self, query: QueryKey) -> None:
         """Add query to dashboard"""
 
         # update Monitor with the query
@@ -144,9 +138,9 @@ class TORminal(App):
         route = self.dataset.routes.get(query.route_id)
 
         # if Bollard for this stop already exists
-        if bollard := self._bollards.get(stop.code, None):
+        if bollard := self._bollards.get(query.stop_code, None):
             if route not in bollard.routes:
-                bollard.routes.append(route)
+                bollard.routes.append(query.route_id)
             bollard.update_routes()
             return
 

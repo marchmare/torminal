@@ -1,12 +1,19 @@
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from torminal.gtfs.static import GTFSStaticFeed
+
 import csv
 import asyncio
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Mapping
 from collections import defaultdict
 from typing import Callable, TypeVar
 from dataclasses import dataclass, field
 from csv import DictReader
 from zipfile import ZipFile
 from io import TextIOWrapper
+from concurrent.futures import ThreadPoolExecutor
 
 from torminal.gtfs.gps import shape_to_path
 from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
@@ -24,39 +31,76 @@ from torminal.gtfs.data import (
     StopTime,
 )
 
+StopRouteIndex = Mapping[str, Mapping[str, list[tuple[Trip, StopTime]]]]
+
 
 @dataclass
 class GTFSStaticFeed:
     vehicles: dict[str, Vehicle]
     trips: dict[str, Trip]
-    _trip_stops: dict[str, TripStops] = field(init=True, repr=False)  # deleted in __post_init__
     routes: dict[str, Route]
     stops: dict[str, Stop]  # stops by ID
     shapes: dict[str, Shape]
     service_calendars: dict[str, ServiceCalendar]
     feed_info: FeedInfo
+    _trip_stops: dict[str, TripStops] = field(init=True, repr=False)  # deleted in build_indices()
     stops_by_code: dict[str, Stop] = field(init=False)
     stop_route_index: dict[Stop, dict[Route, tuple[Trip, StopTime]]] = field(init=False)
 
-    def __post_init__(self) -> None:
-        self.stop_route_index: dict[str, dict[str, list[tuple[Trip, StopTime]]]] = defaultdict(
-            lambda: defaultdict(list)
-        )
+    def build_indices(self) -> None:
+        """
+        Build derived lookup indices, runs in separate threads and is to be called with async wrapper,
+        so it can't be __post_init__.
+        """
 
-        for trip in self.trips.values():
-            # map trip_stops to trip
-            trip_stops = self._trip_stops.get(trip.id, None)
-            if trip_stops:
-                trip.stop_times = trip_stops.items
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            f_stops = pool.submit(self._build_stops_by_code)
+            f_times = pool.submit(self._remap_stop_times)
+            f_index = pool.submit(self._build_stop_route_index)
 
-            # prepare stop_route_index
-            route = self.routes.get(trip.route_id)
-            if not route:
-                continue
-            for stop_time in trip.stop_times:
-                self.stop_route_index[stop_time.stop_id][route.id].append((trip, stop_time))
+        f_times.result()
+        self.stops_by_code = f_stops.result()
+        self.stop_route_index = f_index.result()
 
         del self._trip_stops
+
+    def _build_stops_by_code(self) -> dict[str, Stop]:
+        """Thread creating lookup of Stops using stop code key."""
+        return {stop.code: stop for stop in self.stops.values()}
+
+    def _remap_stop_times(self) -> None:
+        """Thread assigning StopTimes items to related Trip."""
+        for trip in self.trips.values():
+            if trip_stops := self._trip_stops.get(trip.id):
+                trip.stop_times = trip_stops.items
+
+    def _build_stop_route_index(self) -> StopRouteIndex:
+        """
+        Thread creating lookup for stop-route pairs, returning tuples of (Trip, StopTime).
+        Stops are indexed by code.
+        """
+
+        def create_route_index() -> defaultdict[str, list[tuple[Trip, StopTime]]]:
+            return defaultdict(list)
+
+        index: StopRouteIndex = defaultdict(create_route_index)
+
+        for trip in self.trips.values():
+
+            route = self.routes.get(trip.route_id)
+            trip_stops = self._trip_stops.get(trip.id)
+
+            if not route or not trip_stops:
+                continue
+            for stop_time in trip_stops.items:
+                stop = self.stops.get(stop_time.stop_id)
+
+                if not stop:
+                    continue
+
+                index[stop.code][route.id].append((trip, stop_time))
+
+        return index
 
 
 @dataclass
@@ -77,10 +121,11 @@ class GTFSStaticLoader:
     def __init__(self, progress_callback: Callable[[ProgressEvent], None]) -> None:
         self.callback: Callable[[ProgressEvent], None] = progress_callback
         self.current = 0
-        self.total: int = 11
+        self.total: int = 12
 
     def emit_progress(self, message: str) -> None:
         """Execute callback function with ProgressEvent"""
+        print(message)
         self.callback(ProgressEvent(current=self.current, total=self.total, message=message))
 
     async def track(self, task: Awaitable, message: str):
@@ -126,6 +171,9 @@ class GTFSStaticLoader:
             service_calendars=service_calendars,
             feed_info=feed_info,
         )
+
+        await self.track(asyncio.to_thread(gtfs_static_lookup.build_indices), "Built derived lookup indices")
+
         return gtfs_static_lookup
 
 
