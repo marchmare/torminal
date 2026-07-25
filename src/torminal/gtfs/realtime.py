@@ -61,6 +61,7 @@ async def fetch_peka_vm_feed(stop: Stop | None) -> PEKARealTimeFeed | None:
         fetch_form_post(PEKA_VM_URL, method="getTimes", params={"symbol": stop.code}),
         fetch_form_post(PEKA_VM_URL, method="findMessagesForBollard", params={"symbol": stop.code}),
     )
+
     """_times - list of upcoming departures from the stop"""
     """_bollard_msg - messages currently displayed on a bollard from specified stop."""
 
@@ -69,6 +70,8 @@ async def fetch_peka_vm_feed(stop: Stop | None) -> PEKARealTimeFeed | None:
     #     PEKA_VM_URL, method="getBollardsByStopPoint", params={"symbol": stop.name}
     # )
     # """Returns all stops with the same name and lists all routes that belong to each"""
+    if not _times.get("success", None) or not _bollard_msg.get("success", None):
+        return
 
     return PEKARealTimeFeed(
         bollard=_times["success"]["bollard"], times=_times["success"]["times"], message=_bollard_msg["success"]
