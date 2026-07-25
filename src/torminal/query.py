@@ -249,11 +249,14 @@ class Monitor:
                     if match.trip.service_id != service.id:
                         continue  # skip trips not matching service calendar
 
-                    if not self.check_arrival_within_window(match.stop_time.arrival_time):
-                        continue  # skip stop times outside configured time window
-
                     rt_tu = rt_feed.trip_updates.get(match.trip.id)
                     rt_vp = rt_feed.vehicle_positions.get(match.trip.id)
+
+                    rt_arrival = self.calculate_rt_arrival_time(match, rt_tu) if rt_tu else None
+                    arrival = rt_arrival.time if rt_arrival else match.stop_time.arrival_time
+
+                    if not self.check_arrival_within_window(arrival):
+                        continue  # skip stop times outside configured time window
 
                     yield (stop_code, self.poll(match, rt_tu, rt_vp, rt_msg))
 
