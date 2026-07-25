@@ -1,5 +1,12 @@
 """Python GTFS data models."""
 
+from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from torminal.gtfs.static import GTFSStaticFeed
+    from torminal.query import QueryKey
+
 from dataclasses import dataclass, field
 from enum import IntEnum, StrEnum
 from typing import Literal, TypeVar, Self, ClassVar, Generic, Any
@@ -235,45 +242,6 @@ class FeedInfo:
 
 
 @dataclass
-class Trip(Model):
-    """
-    Trip data parsed from trips.txt.
-    Defines individual vehicle journeys associated with routes and services.
-    A trip is a scheduled journey of a vehicle along a route and is identified by a unique `Trip ID`.
-    `Trip ID` stores legend markers and trip variant info:
-
-        1_11316657   ^   P,G:2:8   +
-        ──────────       ───────   ─
-        trip_id base     markers   main variant
-    """
-
-    _gtfs_file = "trips.txt"
-    _key = "trip_id"
-
-    id: str
-    route_id: str
-    shape_id: str
-    service_id: str
-    headsign: str
-    direction: Direction
-    is_wheelchair_accessible: bool
-    brigade: int
-
-    @classmethod
-    def from_dict(cls, row: dict[str, str]) -> Self:
-        return cls(
-            id=row["trip_id"],
-            route_id=row["route_id"],
-            shape_id=row["shape_id"],
-            service_id=row["service_id"],
-            headsign=row["trip_headsign"],
-            direction=Direction(int(row["direction_id"])),
-            is_wheelchair_accessible=bool(int(row["wheelchair_accessible"])),
-            brigade=int(row["brigade"]),
-        )
-
-
-@dataclass
 class ShapePoint(Model):
     """
     Single point of a trip shape, represented as geographic location.
@@ -291,7 +259,7 @@ class ShapePoint(Model):
         return cls(sequence=int(row["shape_pt_sequence"]), point=gps_point(longitude, latitude))
 
 
-@dataclass
+@dataclass(frozen=True)
 class Route(Model):
     """
     Route data parsed from routes.txt.
@@ -322,7 +290,7 @@ class Route(Model):
         )
 
 
-@dataclass
+@dataclass(frozen=True)
 class Stop(Model):
     """
     Stop data parsed from stops.txt.
@@ -330,7 +298,7 @@ class Stop(Model):
     """
 
     _gtfs_file = "stops.txt"
-    _key = "stop_code"
+    _key = "stop_id"
 
     id: str
     code: str
@@ -375,6 +343,62 @@ class StopTime(Model):
             pickup_type=DropoffPickupType(int(row["pickup_type"])),
             drop_off_type=DropoffPickupType(int(row["drop_off_type"])),
         )
+
+    def stop(self, dataset: GTFSStaticFeed) -> Stop | str:
+        """Get StopTimes's stop object from dataset, returns string code if not found"""
+        return dataset.stops.get(self.stop_id, self.stop_code)
+
+
+@dataclass
+class Trip(Model):
+    """
+    Trip data parsed from trips.txt.
+    Defines individual vehicle journeys associated with routes and services.
+    A trip is a scheduled journey of a vehicle along a route and is identified by a unique `Trip ID`.
+    `Trip ID` stores legend markers and trip variant info:
+
+        1_11316657   ^   P,G:2:8   +
+        ──────────       ───────   ─
+        trip_id base     markers   main variant
+    """
+
+    _gtfs_file = "trips.txt"
+    _key = "trip_id"
+
+    id: str
+    route_id: str
+    shape_id: str
+    service_id: str
+    headsign: str
+    direction: Direction
+    is_wheelchair_accessible: bool
+    brigade: int
+    stop_times: list[StopTime] = field(init=False)
+
+    @classmethod
+    def from_dict(cls, row: dict[str, str]) -> Self:
+        return cls(
+            id=row["trip_id"],
+            route_id=row["route_id"],
+            shape_id=row["shape_id"],
+            service_id=row["service_id"],
+            headsign=row["trip_headsign"],
+            direction=Direction(int(row["direction_id"])),
+            is_wheelchair_accessible=bool(int(row["wheelchair_accessible"])),
+            brigade=int(row["brigade"]),
+        )
+
+    def route(self, dataset: GTFSStaticFeed) -> Route | str:
+        """Get Trip's route object from dataset, returns string ID if not found"""
+        return dataset.routes.get(self.route_id, self.route_id)
+
+    def shape(self, dataset: GTFSStaticFeed) -> Shape | str:
+        """Get Trip's shape object from dataset, returns string ID if not found"""
+        return dataset.shapes.get(self.shape_id, self.shape_id)
+
+    def service(self, dataset: GTFSStaticFeed) -> ServiceCalendar | str:
+        """Get Trip's service calendar object from dataset, returns string ID if not found"""
+        return dataset.service_calendars.get(self.service_id, self.service_id)
 
 
 @dataclass

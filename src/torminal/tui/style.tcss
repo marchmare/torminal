@@ -64,6 +64,18 @@ Spinner {
     margin: 1;
 }
 
+Bollard:disabled {
+    background: $panel 50%;
+    border: round $primary-darken-3 75%;
+    border-title-background: $foreground 25%;
+    border-title-color: $foreground 50%;
+    
+    & Label.routes {
+        background: $background 25%;
+        color: $text 50%;
+    }
+}
+
 Bollard {
     height: auto;
     border: round $primary;
