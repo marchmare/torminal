@@ -88,9 +88,12 @@ class Bollard(Vertical):
 
         rows = []
         for poll in polls:
+
             eta = (
                 poll.planned_arrival.eta
-                if not poll.realtime_arrival or is_rt_satus_unavailable(poll.status)
+                if not poll.realtime_arrival
+                or not hasattr(poll.realtime_arrival, "eta")
+                or is_rt_satus_unavailable(poll.status)
                 else poll.realtime_arrival.eta
             )
             rows.append(
