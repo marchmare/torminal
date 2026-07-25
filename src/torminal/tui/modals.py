@@ -73,6 +73,11 @@ def get_markup_routes(routes: list[Route]) -> list[str]:
 
 
 class QueryInput(ModalScreen):
+
+    BINDINGS = [
+        ("escape", "back", "Back"),
+    ]
+
     def __init__(self, stops: list[str], routes: list[str]) -> None:
         super().__init__()
         self.stops = [DropdownItem(main=Content.from_markup(s)) for s in stops]
@@ -103,6 +108,12 @@ class QueryInput(ModalScreen):
 
         elif event.button.id == "add":
             self.dismiss((self.stop_input.value, self.route_input.value))
+
+    def action_back(self) -> None:
+        self.dismiss(("", ""))
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        self.screen.focus_next()
 
     @property
     def modal(self) -> Label:
