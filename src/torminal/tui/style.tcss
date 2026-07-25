@@ -1,4 +1,4 @@
-LoadingScreen, QueryInput {
+LoadingScreen, QueryInput, QueryRemove {
     align: center middle;
     background: $background 60%;
     height: 100%;
@@ -75,6 +75,17 @@ Bollard:disabled {
         color: $text 50%;
     }
 }
+
+QueryRemove {
+    .box { 
+        height: auto;
+    }
+    & DataTable {
+        height: 15;
+        width: 100%;   
+    }
+}
+
 
 Bollard {
     height: auto;

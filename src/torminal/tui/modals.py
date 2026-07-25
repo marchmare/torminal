@@ -1,15 +1,17 @@
 from textual.app import ComposeResult
-from textual.widgets import Label, ProgressBar, Button, Input
+from textual.widgets import Label, ProgressBar, Button, Input, DataTable
 from textual.screen import ModalScreen
 from textual.containers import Container, Vertical, Horizontal
 from textual import work
 from textual.content import Content
 from textual_autocomplete import AutoComplete, DropdownItem
 
+from torminal.config import config
 from torminal.gtfs.static import GTFSStaticLoader
 from torminal.gtfs.static import ProgressEvent
 from torminal.tui.widgets.spinner import Spinner
 from torminal.gtfs.data import Route, Stop
+from torminal.query import Monitor, QueryKey
 from asyncio import sleep
 
 LOGO = """░▀█▀░█▀█░█▀▄░█▄█░▀█▀░█▀█░█▀█░█░░░
@@ -130,6 +132,93 @@ class QueryInput(ModalScreen):
     @property
     def button_add(self) -> Button:
         return self.query_one("#add", Button)
+
+    @property
+    def button_cancel(self) -> Button:
+        return self.query_one("#cancel", Button)
+
+
+class QueryRemove(ModalScreen):
+    BINDINGS = [
+        ("escape", "back", "Back"),
+        ("delete", "remove", "Remove"),
+    ]
+
+    stop_code_w = 9
+    stop_name_w = 30
+    route_w = 5
+
+    COLUMNS = [
+        ("Stop code", "stop_code", stop_code_w),
+        (f"{'Stop name':<{stop_name_w}}", "stop_name", stop_name_w),
+        (f"{'Route':<{route_w}}", "route", route_w),
+    ]
+
+    def __init__(self, stops: dict[str, Stop], monitor: Monitor) -> None:
+        super().__init__()
+        self.stops = stops
+        self.monitor = monitor
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="box"):
+            yield DataTable()
+            with Horizontal(classes="horizontal_buttons"):
+                yield Button("Remove", flat=True, id="remove")
+                yield Button("Remove all", flat=True, id="remove_all")
+                yield Button("Back", flat=True, id="cancel")
+
+    def on_mount(self) -> None:
+        self.modal.border_title = " Remove stops "
+        self.modal.border_subtitle = " 🐐 "
+
+        for column in QueryRemove.COLUMNS:
+            self.table.add_column(column[0], key=column[1], width=column[2])
+        self.table.cursor_type = "row"
+
+        for query in config.queries:
+            stop_name = ""
+            if stop := self.stops.get(query[0], None):
+                stop_name = stop.name
+            self.table.add_row(query[0], stop_name, query[1], key=f"{query[0]}{query[1]}")
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "cancel":
+            self.dismiss()
+
+        elif event.button.id == "remove_all":
+            for i in range(self.table.row_count):
+                row = self.table.get_row_at(i)
+                query = QueryKey(row[0], row[2])
+                self.monitor.remove_query(query)
+            self.table.clear()
+
+        elif event.button.id == "remove":
+            row_index = self.table.cursor_row
+            row = self.table.get_row_at(row_index)
+
+            query = QueryKey(row[0], row[2])
+
+            self.monitor.remove_query(query)
+            self.table.remove_row(f"{query.stop_code}{query.route_id}")
+
+    def action_back(self) -> None:
+        self.dismiss()
+
+    @property
+    def modal(self) -> Label:
+        return self.query_one(".box", Container)
+
+    @property
+    def table(self) -> DataTable:
+        return self.query_one(DataTable)
+
+    @property
+    def button_remove(self) -> Button:
+        return self.query_one("#remove", Button)
+
+    @property
+    def button_remove_all(self) -> Button:
+        return self.query_one("#remove_all", Button)
 
     @property
     def button_cancel(self) -> Button:

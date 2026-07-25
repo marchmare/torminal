@@ -11,7 +11,7 @@ from torminal.gtfs.static import GTFSStaticFeed
 from torminal.query import QueryKey, Monitor, RealtimePollResult
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
-from torminal.tui.modals import LoadingScreen, QueryInput, get_markup_routes, get_markup_stops
+from torminal.tui.modals import LoadingScreen, QueryInput, QueryRemove, get_markup_routes, get_markup_stops
 from torminal.tui.widgets.bollard import Bollard, UnavailableStop
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
@@ -145,13 +145,20 @@ class TORminal(App):
         self._bollards[stop.code] = new_bollard
         await self.dashboard.mount(new_bollard)
 
-    def action_remove_selected(self) -> None:
-        """An action to remove selected query from the dashboard."""
-        pass
+    @work
+    async def action_remove_stops(self) -> None:
+        """An action to remove stops from the dashboard."""
 
-    def action_edit_selected(self) -> None:
-        """An action to edit selected query in the dashboard."""
-        pass
+        await self.push_screen_wait(QueryRemove(self.dataset.stops_by_code, self.monitor))
+
+        queries = {query[0] for query in config.queries}
+        for key, bollard in self._bollards.items():
+
+            if key in queries:
+                bollard.update_routes()
+                continue
+
+            bollard.remove()
 
     def action_options(self) -> None:
         """An action to display settings dialog."""
