@@ -186,20 +186,23 @@ class QueryRemove(ModalScreen):
             self.dismiss()
 
         elif event.button.id == "remove_all":
-            for i in range(self.table.row_count):
-                row = self.table.get_row_at(i)
+            rows = [self.table.get_row_at(i) for i in range(self.table.row_count)]
+            for row in rows:
                 query = QueryKey(row[0], row[2])
-                self.monitor.remove_query(query)
-            self.table.clear()
+
+                self._remove_row(query)
 
         elif event.button.id == "remove":
+            # removes selected row in the modal
             row_index = self.table.cursor_row
             row = self.table.get_row_at(row_index)
-
             query = QueryKey(row[0], row[2])
 
-            self.monitor.remove_query(query)
-            self.table.remove_row(f"{query.stop_code}{query.route_id}")
+            self._remove_row(query)
+
+    def _remove_row(self, query: QueryKey) -> None:
+        self.monitor.remove_query(query)
+        self.table.remove_row(f"{query.stop_code}{query.route_id}")
 
     def action_back(self) -> None:
         self.dismiss()

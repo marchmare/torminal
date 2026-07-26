@@ -44,6 +44,8 @@ class TORminal(App):
 
     @work
     async def on_mount(self) -> None:
+        # self._make_screenshot()
+
         self.theme = "gruvbox"
         self.title = "🚋 TORminal"
         self.sub_title = "public transport departures dashboard"
@@ -73,6 +75,12 @@ class TORminal(App):
 
             self._update_results()
             await asyncio.sleep(config.gtfs_rt_poll_interval)
+
+    @work
+    async def _make_screenshot(self) -> None:
+        while True:
+            self.save_screenshot(filename=None, path="screenshots/", time_format=None)
+            await asyncio.sleep(5)
 
     @work
     async def _poll_peka(self) -> None:
@@ -150,15 +158,20 @@ class TORminal(App):
         """An action to remove stops from the dashboard."""
 
         await self.push_screen_wait(QueryRemove(self.dataset.stops_by_code, self.monitor))
+        await asyncio.sleep(0)
 
         queries = {query[0] for query in config.queries}
-        for key, bollard in self._bollards.items():
-
+        for key, bollard in list(self._bollards.items()):
             if key in queries:
                 bollard.update_routes()
-                continue
+            else:
+                bollard.remove()
+                self._bollards.pop(key)
 
-            bollard.remove()
+        self.refresh(repaint=True, layout=True, recompose=True)
+        # BUG: after removing all queries at once, TORminal might render footer blank and not respond,
+        # the fix is to switch to another window and back. The solution could be rerendering the entire DOM,
+        # but without using cached diff.
 
     def action_options(self) -> None:
         """An action to display settings dialog."""
