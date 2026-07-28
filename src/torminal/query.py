@@ -49,14 +49,15 @@ class QueryKey:
             * stop input: ' (CODE123) Stop Name  '
             * route input: '  (123) Route direction - Route direction  ' (allows routes like T6)
         """
-        pattern = r"^\s*\(\s*([A-Z0-9]+)\s*\)"
+        stop_pattern = r"([A-Z0-9](?:\s*[A-Z0-9])*)"
+        route_pattern = r"^\s*\(\s*([A-Z0-9]+)\s*\)"
 
-        re_stop_code = re.search(pattern, stop_input)
+        re_stop_code = re.search(stop_pattern, stop_input)
         if not re_stop_code:
             return None
         stop_code = re_stop_code.group(1)
 
-        re_route_id = re.search(pattern, route_input)
+        re_route_id = re.search(route_pattern, route_input)
         if not re_route_id:
             return None
         route_id = re_route_id.group(1)
