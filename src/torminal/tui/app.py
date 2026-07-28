@@ -39,11 +39,15 @@ class TORminal(App):
     _gtfs_rt_poll_interval: int = 5
     _peka_cache: dict[str, PEKARealTimeFeed] = {}
     _gtfs_rt_cache: GTFSRealTimeFeed | None = None
-    _autoscroll_active: bool = True
+    _autoscroll_active: bool = False
     _autoscroll_end_idle_interval: int = 3
     _autoscroll_interval: int = 0.5
 
     _bollards: dict[str, Bollard] = {}
+
+    def __init__(self, headless: bool = False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._autoscroll_active = headless
 
     @work
     async def on_mount(self) -> None:
