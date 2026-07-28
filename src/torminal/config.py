@@ -1,7 +1,10 @@
 import tomllib
 import tomli_w
-from typing import Self
+import asyncio
+from typing import Self, Callable
 from dataclasses import dataclass, field
+from inotify_simple import INotify, flags
+from threading import Thread
 
 from torminal.requests import CONFIG_DIR
 
@@ -40,6 +43,24 @@ class Config:
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
         with open(CONFIG_PATH, "wb") as f:
             tomli_w.dump(self.__dict__, f)
+
+    def reload(self) -> None:
+        self.__dict__.update(Config.load().__dict__)
+
+    async def _watch(self, callback: Callable[[], None]) -> None:
+        """Enable system call watcher for config file"""
+        inotify = INotify()
+        inotify.add_watch(CONFIG_PATH.parent, flags.CLOSE_WRITE)
+
+        while True:
+            for event in inotify.read():
+                if event.name == CONFIG_PATH.name:
+                    self.reload()
+                    await callback()
+
+    def watch(self, callback: Callable[[], None]) -> None:
+        """Thread wrapper for system call watcher"""
+        Thread(target=lambda: asyncio.run(self._watch(callback)), daemon=True).start()
 
 
 config = Config.load()

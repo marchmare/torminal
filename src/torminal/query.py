@@ -130,6 +130,9 @@ class Monitor:
         """
 
         stop_queries = self.queries.setdefault(query.stop_code, {})
+        if query.route_id in stop_queries:
+            return True
+
         matches = stop_queries.setdefault(query.route_id, [])
 
         dataset = self.dataset.stop_route_index.get(query.stop_code, {}).get(query.route_id, [])

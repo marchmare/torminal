@@ -50,6 +50,7 @@ class TORminal(App):
         super().__init__(*args, **kwargs)
         self._autoscroll_active = headless
 
+    @work
     async def _on_resize(self, event: events.Resize) -> None:
         """Adjust amount of bollard columns based on terminal window width"""
 
@@ -89,6 +90,7 @@ class TORminal(App):
         self._poll_peka()
         self._poll_gtfs_rt()
         self._autoscroll_handler()
+        self.config.watch(self.add_new_from_config)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
