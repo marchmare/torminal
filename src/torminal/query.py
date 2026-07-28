@@ -194,7 +194,7 @@ class Monitor:
             """Check if vehicle's recent average velocity is near 0 for prolonged time."""
 
             v_threshold = 2.0  # km/h
-            window = 3 * 60  # 3 minutes
+            window = 5 * 60  # 5 minutes
             history_len = int(window / config.gtfs_rt_poll_interval)
             history_slice = [v for _, v in query.velocity_history[-history_len:] if v is not None]
 

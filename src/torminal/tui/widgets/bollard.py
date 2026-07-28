@@ -178,7 +178,7 @@ class Bollard(Vertical):
             case VehicleStatus.STUCK:
                 return Content.from_markup("[bold]STUCK[/]")
             case VehicleStatus.AT_TERMINUS:
-                return f"{f'((o))':^{status_w}}"
+                return Content.from_markup("[italic]STDBY[/]")
             case VehicleStatus.NO_RT:
                 return ""
 
