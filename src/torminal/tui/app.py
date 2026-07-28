@@ -1,7 +1,7 @@
 """TORminal TUI definition."""
 
 import asyncio
-from textual import work
+from textual import work, events
 from textual.app import App, ComposeResult
 from textual.widgets import Footer, Header
 from textual.containers import Grid
@@ -39,15 +39,36 @@ class TORminal(App):
     _gtfs_rt_poll_interval: int = 5
     _peka_cache: dict[str, PEKARealTimeFeed] = {}
     _gtfs_rt_cache: GTFSRealTimeFeed | None = None
+
     _autoscroll_active: bool = False
     _autoscroll_end_idle_interval: int = 3
     _autoscroll_interval: int = 0.5
 
     _bollards: dict[str, Bollard] = {}
 
-    def __init__(self, headless: bool = False, *args, **kwargs):
+    def __init__(self, headless: bool = False, *args, **kwargs) -> None:
         super().__init__(*args, **kwargs)
         self._autoscroll_active = headless
+
+    async def _on_resize(self, event: events.Resize) -> None:
+        """Adjust amount of bollard columns based on terminal window width"""
+
+        super()._on_resize(event)
+
+        if not hasattr(self, "dashboard"):
+            return
+
+        if self._autoscroll_active:
+            self.dashboard.styles.grid_size_columns = 1
+            return
+
+        width = self.app.size.width
+        target_bollard_width = 60  # minimum allowed width of a single bollard
+        margin = self.dashboard.styles.margin.width
+        gutter = self.dashboard.styles.grid_gutter_horizontal
+
+        cols = (width - margin) // (target_bollard_width + 2 * gutter)
+        self.dashboard.styles.grid_size_columns = max(1, cols)
 
     @work
     async def on_mount(self) -> None:
@@ -56,6 +77,9 @@ class TORminal(App):
         self.theme = "gruvbox"
         self.title = "🚋 TORminal"
         self.sub_title = "public transport departures dashboard"
+
+        if self._autoscroll_active:
+            self.dashboard.styles.scrollbar_size_vertical = 0
 
         self.dataset = await self.push_screen_wait(LoadingScreen())
 
@@ -104,7 +128,6 @@ class TORminal(App):
 
     @work
     async def _autoscroll_handler(self) -> None:
-        wgt = self.query_one("#dashboard")
         # seconds spent waiting at the extreme positions before resuming scroll again
         idle_counter = 0
         # true if going back up again
@@ -113,10 +136,10 @@ class TORminal(App):
             if self._autoscroll_active:
                 # detect edge positions
                 at_edge = False
-                if wgt.scroll_y + 1 > wgt.max_scroll_y:
+                if self.dashboard.scroll_y + 1 > self.dashboard.max_scroll_y:
                     reverse = True
                     at_edge = True
-                elif wgt.scroll_y == 0:
+                elif self.dashboard.scroll_y == 0:
                     reverse = False
                     at_edge = True
                 if at_edge and idle_counter < self._autoscroll_end_idle_interval:
@@ -127,9 +150,9 @@ class TORminal(App):
                     idle_counter = 0
 
                 if reverse:
-                    wgt.scroll_up()
+                    self.dashboard.scroll_up()
                 else:
-                    wgt.scroll_down()
+                    self.dashboard.scroll_down()
 
             await asyncio.sleep(self._autoscroll_interval)
 

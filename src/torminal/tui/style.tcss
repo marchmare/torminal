@@ -57,7 +57,6 @@ Spinner {
 }
 
 .dashboard {
-    grid-size: 1;
     grid-rows: auto;
     grid-gutter: 1 2;
     overflow-y: auto;
