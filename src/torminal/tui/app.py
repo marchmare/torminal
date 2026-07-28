@@ -39,8 +39,15 @@ class TORminal(App):
     _gtfs_rt_poll_interval: int = 5
     _peka_cache: dict[str, PEKARealTimeFeed] = {}
     _gtfs_rt_cache: GTFSRealTimeFeed | None = None
+    _autoscroll_active: bool = False
+    _autoscroll_end_idle_interval: int = 3
+    _autoscroll_interval: int = 0.5
 
     _bollards: dict[str, Bollard] = {}
+
+    def __init__(self, headless: bool = False, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._autoscroll_active = headless
 
     @work
     async def on_mount(self) -> None:
@@ -57,12 +64,13 @@ class TORminal(App):
 
         self._poll_peka()
         self._poll_gtfs_rt()
+        self._autoscroll_handler()
 
     def compose(self) -> ComposeResult:
         yield Header()
         yield Footer(show_command_palette=False)
 
-        yield Grid(classes="dashboard")
+        yield Grid(id="dashboard", classes="dashboard")
 
     @work
     async def _poll_gtfs_rt(self) -> None:
@@ -93,6 +101,37 @@ class TORminal(App):
 
             self._update_results()
             await asyncio.sleep(config.peka_poll_interval)
+
+    @work
+    async def _autoscroll_handler(self) -> None:
+        wgt = self.query_one("#dashboard")
+        # seconds spent waiting at the extreme positions before resuming scroll again
+        idle_counter = 0
+        # true if going back up again
+        reverse = False
+        while True:
+            if self._autoscroll_active:
+                # detect edge positions
+                at_edge = False
+                if wgt.scroll_y + 1 > wgt.max_scroll_y:
+                    reverse = True
+                    at_edge = True
+                elif wgt.scroll_y == 0:
+                    reverse = False
+                    at_edge = True
+                if at_edge and idle_counter < self._autoscroll_end_idle_interval:
+                    await asyncio.sleep(self._autoscroll_interval)
+                    idle_counter += self._autoscroll_interval
+                    continue
+                if at_edge and idle_counter >= self._autoscroll_end_idle_interval:
+                    idle_counter = 0
+
+                if reverse:
+                    wgt.scroll_up()
+                else:
+                    wgt.scroll_down()
+
+            await asyncio.sleep(self._autoscroll_interval)
 
     async def _fetch_all_peka(self) -> dict[str, PEKARealTimeFeed]:
         """Fetch PEKA virtual monitor feeds for each stop in monitored queries."""
