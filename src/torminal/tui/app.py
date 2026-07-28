@@ -91,7 +91,7 @@ class TORminal(App):
         self._autoscroll_handler()
 
     def compose(self) -> ComposeResult:
-        yield Header()
+        yield Header(show_clock=True)
         yield Footer(show_command_palette=False)
 
         yield Grid(id="dashboard", classes="dashboard")
