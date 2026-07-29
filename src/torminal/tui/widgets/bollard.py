@@ -199,7 +199,7 @@ class Bollard(Vertical):
                 print(f"Route {route} doesn't belong on {self.stop}")
                 _formatted_routes.append(f"[$text 25%]{route}[/]")
 
-        return Content.from_markup(f"Routes: {", ".join(_formatted_routes)}") if routes else ""
+        return Content.from_markup(f"Routes: {', '.join(_formatted_routes)}") if routes else ""
 
     @staticmethod
     def format_delay(arrival_time: ArrivalTime) -> str:
