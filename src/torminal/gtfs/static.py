@@ -6,14 +6,16 @@ if TYPE_CHECKING:
 
 import csv
 import asyncio
+import io
 from collections.abc import Awaitable, Mapping
 from collections import defaultdict
 from typing import Callable, TypeVar
 from dataclasses import dataclass, field
 from csv import DictReader
-from zipfile import ZipFile
 from io import TextIOWrapper
 from concurrent.futures import ThreadPoolExecutor
+from csv import DictReader
+from io import TextIOWrapper
 
 from torminal.gtfs.gps import shape_to_path
 from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
@@ -146,15 +148,25 @@ class GTFSStaticLoader:
 
         # parse into dataset
         with open_vehicle_dictionary() as vd, open_gtfs_zip() as z:
+            # ZipFile is not thread-safe - read all bytes first
+            raw_trips = z.read(Trip._gtfs_file)
+            raw_trip_stops = z.read(TripStops._gtfs_file)
+            raw_routes = z.read(Route._gtfs_file)
+            raw_stops = z.read(Stop._gtfs_file)
+            raw_shapes = z.read(Shape._gtfs_file)
+            raw_calendar = z.read(ServiceCalendar._gtfs_file)
+            raw_feed_info = z.read(FeedInfo._gtfs_file)
+
+            # pass raw bytes to worker threads.
             results = await asyncio.gather(
                 self.track(asyncio.to_thread(parse_vehicle_dictionary, vd), "Parsed vehicle_dictionary.csv"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, Trip, z), "Parsed trips.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, TripStops, z), "Parsed trip_stops.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, Route, z), "Parsed routes.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, Stop, z), "Parsed stops.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, Shape, z), "Parsed shapes.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict, ServiceCalendar, z), "Parsed service.txt"),
-                self.track(asyncio.to_thread(parse_feed_info, z), "Parsed feed_info.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Trip, raw_trips), "Parsed trips.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, TripStops, raw_trip_stops), "Parsed trip_stops.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Route, raw_routes), "Parsed routes.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, Stop, raw_stops), "Parsed stops.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, Shape, raw_shapes), "Parsed shapes.txt"),
+                self.track(asyncio.to_thread(parse_txt_as_dict, ServiceCalendar, raw_calendar), "Parsed service.txt"),
+                self.track(asyncio.to_thread(parse_feed_info, raw_feed_info), "Parsed feed_info.txt"),
             )
 
         vehicles, trips, trip_stops, routes, stops, shapes, service_calendars, feed_info = results
@@ -187,27 +199,27 @@ def build_all_polygons(shapes: dict[str, Shape]) -> None:
         shape.path = shape_to_path(shape.items)
 
 
-def parse_txt_as_dict(model: type[M], z: ZipFile) -> dict[str, M]:
+def parse_txt_as_dict(model: type[M], raw: bytes) -> dict[str, M]:
     """
     Parse a GTFS text file into a dictionary indexed by a unique key.
 
     Intended for files where the key column acts as a primary key and
     each key corresponds to a single record.
     """
-    with z.open(model._gtfs_file) as f:
-        reader = csv.DictReader(TextIOWrapper(f, encoding="utf-8-sig"))
+    with TextIOWrapper(io.BytesIO(raw), encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
         return {row[model._key]: model.from_dict(row) for row in reader}
 
 
-def parse_txt_as_dict_grouped(model: type[G], z: ZipFile) -> dict[str, G]:
+def parse_txt_as_dict_grouped(model: type[G], raw: bytes) -> dict[str, G]:
     """
     Parse a GTFS text file into a dictionary grouped by a key column.
 
     Intended for files where multiple records share the same key,
     representing a one-to-many relationship.
     """
-    with z.open(model._gtfs_file) as f:
-        reader = csv.DictReader(TextIOWrapper(f, encoding="utf-8-sig"))
+    with TextIOWrapper(io.BytesIO(raw), encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
         _dict: dict[str, G] = {}
 
         for row in reader:
@@ -227,11 +239,11 @@ def parse_vehicle_dictionary(vehicle_dictionary_reader: DictReader) -> dict[str,
     return {row["vehicle"]: Vehicle.from_dict(row) for row in vehicle_dictionary_reader}
 
 
-def parse_feed_info(z: ZipFile) -> FeedInfo:
+def parse_feed_info(raw: bytes) -> FeedInfo:
     """
     Parse feed_info.txt.
     """
-    with z.open(FeedInfo._gtfs_file) as f:
-        reader = csv.DictReader(TextIOWrapper(f, encoding="utf-8-sig"))
+    with TextIOWrapper(io.BytesIO(raw), encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
         row = next(reader)
         return FeedInfo.from_dict(row)
