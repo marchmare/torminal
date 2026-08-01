@@ -49,5 +49,5 @@ def gtfs_time_to_dt(gtfs_time: str) -> datetime:
     if hours > 24 and now.time() < time(4, 0):  # TODO: this needs to be the hour of night/day trip boundary
         base = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
     else:
-        base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        base = now.replace(hour=0, minute=0, second=0, microsecond=0)
     return base + timedelta(hours=hours, minutes=minutes, seconds=seconds)
