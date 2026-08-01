@@ -251,12 +251,16 @@ class ShapePoint(Model):
     _key = "shape_pt_sequence"
 
     sequence: int
-    point: Point
+    longitude: float
+    latitude: float
 
     @classmethod
     def from_dict(cls, row: dict[str, str]) -> Self:
-        longitude, latitude = float(row["shape_pt_lon"]), float(row["shape_pt_lat"])
-        return cls(sequence=int(row["shape_pt_sequence"]), point=gps_point(longitude, latitude))
+        return cls(
+            sequence=int(row["shape_pt_sequence"]),
+            longitude=float(row["shape_pt_lon"]),
+            latitude=float(row["shape_pt_lat"]),
+        )
 
 
 @dataclass(frozen=True)
