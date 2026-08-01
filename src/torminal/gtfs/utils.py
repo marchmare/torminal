@@ -52,13 +52,9 @@ def resolve_service_calendar(dataset) -> ServiceCalendar | None:
 def enum_from_series(series: Any, enum_type: type[Enum]) -> list[Enum]:
     """Map a column of unique enum string values to enum members, vectorized."""
 
-    values = np.asarray(series, dtype=str)
-    if issubclass(enum_type, IntEnum):  # convert to int values if IntEnum
-        values = values.astype(int)  # otherwise keep StrEnum
-
-    # cache enum construction per distinct value for faster lookup
-    mapping: dict[Any, Enum] = {value: enum_type(value) for value in np.unique(values)}
-    return [mapping[value] for value in values]
+    converted = series.astype(int) if issubclass(enum_type, IntEnum) else series.astype(str)
+    mapping: dict[Any, Enum] = {value: enum_type(value) for value in np.unique(converted)}
+    return converted.map(mapping).tolist()
 
 
 def flag_to_bool(series: Any) -> Series:
