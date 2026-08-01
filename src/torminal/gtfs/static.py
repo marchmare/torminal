@@ -7,6 +7,7 @@ if TYPE_CHECKING:
 import asyncio
 import csv
 import io
+from os import cpu_count
 from collections.abc import Awaitable, Mapping
 from collections import defaultdict
 from typing import Callable, TypeVar
@@ -172,7 +173,9 @@ class GTFSStaticLoader:
 
         vehicles, trips, trip_stops, routes, stops, shapes, service_calendars, feed_info = results
 
-        await self.track(asyncio.to_thread(build_all_polygons, shapes), "Built trip shape polygons")
+        polygons = asyncio.create_task(
+            self.track(asyncio.to_thread(build_all_paths, shapes), "Built trip shape polygons")
+        )
 
         gtfs_static_lookup = GTFSStaticFeed(
             vehicles=vehicles,
@@ -185,7 +188,11 @@ class GTFSStaticLoader:
             feed_info=feed_info,
         )
 
-        await self.track(asyncio.to_thread(gtfs_static_lookup.build_indices), "Built derived lookup indices")
+        indices = asyncio.create_task(
+            self.track(asyncio.to_thread(gtfs_static_lookup.build_indices), "Built derived lookup indices")
+        )
+
+        await asyncio.gather(polygons, indices)
 
         return gtfs_static_lookup
 
@@ -194,10 +201,20 @@ M = TypeVar("M", bound=Model)
 G = TypeVar("G", bound=GroupModel)
 
 
-def build_all_polygons(shapes: dict[str, Shape]) -> None:
-    """Build and assign buffered path for a Shape from its items."""
-    for shape in shapes.values():
-        shape.path = shape_to_path(shape.items)
+def build_all_paths(shapes: dict[str, Shape], workers: int = 4) -> None:
+    """
+    Build and assign buffered path for a Shape from its items.
+    Runs in parallel workers since shapely releases the GIL.
+    """
+    _workers = workers or cpu_count()
+    items = list(shapes.items())
+
+    def work(part: list[tuple[str, Shape]]) -> None:
+        for _, shape in part:
+            shape.path = shape_to_path(shape.items)
+
+    with ThreadPoolExecutor(max_workers=min(_workers, len(items))) as pool:
+        pool.map(work, [items[i::_workers] for i in range(min(_workers, len(items)))])
 
 
 def read_gtfs_df(raw: bytes) -> pd.DataFrame:
