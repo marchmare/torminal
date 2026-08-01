@@ -13,6 +13,7 @@ if TYPE_CHECKING:
 
 from shapely.geometry import Point, LineString
 from pyproj import Transformer
+import numpy as np
 
 # transformers
 proj_to2180 = Transformer.from_crs("EPSG:4326", "EPSG:2180", always_xy=True)
@@ -36,8 +37,10 @@ def calculate_points_distance(point1: Point, point2: Point) -> float:
 def shape_to_path(shape_points: list[ShapePoint], radius: int = 80) -> LineString:
     """Create buffered path out of ShapePoints list (already in PL-2000)."""
 
-    ordered_list = sorted(shape_points, key=lambda item: item.sequence)
-    line = LineString([item.point for item in ordered_list])
+    ordered_points = sorted(shape_points, key=lambda item: item.sequence)
+    coords = np.asarray([(p.longitude, p.latitude) for p in ordered_points], dtype=float)
+    x, y = proj_to2180.transform(coords[:, 0], coords[:, 1])
+    line = LineString(np.column_stack([x, y]))
     return line.buffer(radius)
 
 
