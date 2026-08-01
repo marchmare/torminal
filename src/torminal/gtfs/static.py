@@ -4,18 +4,17 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from torminal.gtfs.static import GTFSStaticFeed
 
-import csv
 import asyncio
+import csv
 import io
 from collections.abc import Awaitable, Mapping
 from collections import defaultdict
 from typing import Callable, TypeVar
 from dataclasses import dataclass, field
-from csv import DictReader
 from io import TextIOWrapper
 from concurrent.futures import ThreadPoolExecutor
-from csv import DictReader
-from io import TextIOWrapper
+
+import pandas as pd
 
 from torminal.gtfs.gps import shape_to_path
 from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
@@ -161,7 +160,9 @@ class GTFSStaticLoader:
             results = await asyncio.gather(
                 self.track(asyncio.to_thread(parse_vehicle_dictionary, vd), "Parsed vehicle_dictionary.csv"),
                 self.track(asyncio.to_thread(parse_txt_as_dict, Trip, raw_trips), "Parsed trips.txt"),
-                self.track(asyncio.to_thread(parse_txt_as_dict_grouped, TripStops, raw_trip_stops), "Parsed trip_stops.txt"),
+                self.track(
+                    asyncio.to_thread(parse_txt_as_dict_grouped, TripStops, raw_trip_stops), "Parsed trip_stops.txt"
+                ),
                 self.track(asyncio.to_thread(parse_txt_as_dict, Route, raw_routes), "Parsed routes.txt"),
                 self.track(asyncio.to_thread(parse_txt_as_dict, Stop, raw_stops), "Parsed stops.txt"),
                 self.track(asyncio.to_thread(parse_txt_as_dict_grouped, Shape, raw_shapes), "Parsed shapes.txt"),
@@ -199,6 +200,11 @@ def build_all_polygons(shapes: dict[str, Shape]) -> None:
         shape.path = shape_to_path(shape.items)
 
 
+def read_gtfs_df(raw: bytes) -> pd.DataFrame:
+    """Read a GTFS text file into a DataFrame, keeping every cell as a string."""
+    return pd.read_csv(io.BytesIO(raw), encoding="utf-8-sig", dtype=str, keep_default_na=False)
+
+
 def parse_txt_as_dict(model: type[M], raw: bytes) -> dict[str, M]:
     """
     Parse a GTFS text file into a dictionary indexed by a unique key.
@@ -206,9 +212,7 @@ def parse_txt_as_dict(model: type[M], raw: bytes) -> dict[str, M]:
     Intended for files where the key column acts as a primary key and
     each key corresponds to a single record.
     """
-    with TextIOWrapper(io.BytesIO(raw), encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        return {row[model._key]: model.from_dict(row) for row in reader}
+    return model.from_df(read_gtfs_df(raw))
 
 
 def parse_txt_as_dict_grouped(model: type[G], raw: bytes) -> dict[str, G]:
@@ -218,25 +222,17 @@ def parse_txt_as_dict_grouped(model: type[G], raw: bytes) -> dict[str, G]:
     Intended for files where multiple records share the same key,
     representing a one-to-many relationship.
     """
-    with TextIOWrapper(io.BytesIO(raw), encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        _dict: dict[str, G] = {}
-
-        for row in reader:
-            if row[model._key] not in _dict:
-                _dict[row[model._key]] = model.from_dict(row)
-            _dict[row[model._key]].items.append(model._item_model.from_dict(row))
-    return _dict
+    return model.from_df(read_gtfs_df(raw))
 
 
-def parse_vehicle_dictionary(vehicle_dictionary_reader: DictReader) -> dict[str, Vehicle]:
+def parse_vehicle_dictionary(raw: bytes) -> dict[str, Vehicle]:
     """
     Returns dictionary of vehicle ID: Vehicle.
     This file stores info about specific vehicle type and features.
 
          Documentation: https://www.ztm.poznan.pl/wp-content/uploads/2024/07/slownik-pojazdow-opis.pdf
     """
-    return {row["vehicle"]: Vehicle.from_dict(row) for row in vehicle_dictionary_reader}
+    return Vehicle.from_df(read_gtfs_df(raw))
 
 
 def parse_feed_info(raw: bytes) -> FeedInfo:
