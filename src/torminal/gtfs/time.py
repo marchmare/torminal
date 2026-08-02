@@ -12,6 +12,10 @@ Time formats across TORminal:
 """
 
 from datetime import datetime, date, time, timedelta, timezone
+from typing import Any
+
+import numpy as np
+import polars as pl
 
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 fake_today = datetime(2026, 7, 17, 20, 0, 0)
@@ -46,8 +50,54 @@ def gtfs_time_to_dt(gtfs_time: str) -> datetime:
     time_ = gtfs_time.split(":")
     hours, minutes, seconds = int(time_[0]), int(time_[1]), int(time_[2])
     now = datetime.now()
-    if hours > 24 and now.time() < time(4, 0):  # TODO: this needs to be the hour of night/day trip boundary
-        base = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-    else:
-        base = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-    return base + timedelta(hours=hours, minutes=minutes, seconds=seconds)
+    return _time_base(now, hours) + timedelta(hours=hours, minutes=minutes, seconds=seconds)
+
+
+def gtfs_dates_to_dt(gtfs_dates: pl.Series) -> list[date]:
+    """Vectorized version of gtfs_date_to_dt for arrays of YYYYMMDD strings."""
+
+    x = gtfs_dates.cast(pl.Int64)
+    iso = (
+        (x // 10000).cast(pl.String)
+        + "-"
+        + (x // 100 % 100).cast(pl.String).str.zfill(2)
+        + "-"
+        + (x % 100).cast(pl.String).str.zfill(2)
+    )
+    return iso.str.to_date("%Y-%m-%d").to_list()
+
+
+def gtfs_times_to_dt(gtfs_times: pl.Series) -> list[datetime]:
+    """
+    Vectorized version of gtfs_time_to_dt for arrays of HH:MM:SS strings.
+    Handles times overflowing midnight (e.g. 25:03:00 -> tomorrow 01:03:00).
+    Assumes every value is exactly 8 characters long (zero-padded hours).
+    """
+    hours = gtfs_times.str.slice(0, 2).cast(pl.Int64).to_numpy()
+    minutes = gtfs_times.str.slice(3, 2).cast(pl.Int64).to_numpy()
+    seconds = gtfs_times.str.slice(6, 2).cast(pl.Int64).to_numpy()
+
+    day_seconds = hours * 3600 + minutes * 60 + seconds
+    day_seconds_int = 24 * 60 * 60
+
+    now = datetime.now()
+    base = np.datetime64(now.replace(hour=0, minute=0, second=0, microsecond=0)).astype("datetime64[s]")
+    base_shifted = base - np.where(_before_new_service_day(now, hours), day_seconds_int, 0).astype("timedelta64[s]")
+
+    return (base_shifted + day_seconds.astype("timedelta64[s]")).tolist()
+
+
+def _before_new_service_day(now: datetime, hours: Any) -> Any:
+    """
+    Check if time is post-midnight GTFS trip (hours > 24) that belong to the previous service day.
+    Assumes set public transport provider service day begin time.
+    """
+    service_day_begin_time = 4
+    return (hours > 24) & (now.time() < time(service_day_begin_time, 0))
+
+
+def _time_base(now: datetime, hours: int) -> datetime:
+    """Midnight base date for GTFS times, shifting a day back for post-midnight trips before new service day boundary."""
+    if _before_new_service_day(now, hours):
+        return (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    return now.replace(hour=0, minute=0, second=0, microsecond=0)

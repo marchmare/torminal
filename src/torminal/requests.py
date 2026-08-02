@@ -1,7 +1,6 @@
 """Module for accessing GTFS files published by ZTM and handling other HTTP requests."""
 
 import httpx
-import csv
 import json
 from typing import Any, Generator, Optional
 from google.protobuf.internal.containers import RepeatedCompositeFieldContainer
@@ -157,12 +156,12 @@ async def fetch_vehicle_dictionary() -> None:
 
 
 @contextmanager
-def open_vehicle_dictionary() -> Generator[csv.DictReader, Any, None]:
+def open_vehicle_dictionary() -> Generator[bytes, Any, None]:
     """
     Read vehicle_dictionary.csv with vehicle properties.
 
         Documentation: https://www.ztm.poznan.pl/wp-content/uploads/2024/07/slownik-pojazdow-opis.pdf
     """
 
-    with open(f"{CACHE_DIR}/{VEHICLE_DICTIONARY_NAME}", "r") as file:
-        yield csv.DictReader(file)
+    with open(f"{CACHE_DIR}/{VEHICLE_DICTIONARY_NAME}", "rb") as file:
+        yield file.read()
