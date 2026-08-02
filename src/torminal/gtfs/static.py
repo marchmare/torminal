@@ -7,15 +7,14 @@ if TYPE_CHECKING:
 import asyncio
 import csv
 import io
+import polars as pl
+from io import TextIOWrapper
 from os import cpu_count
 from collections.abc import Awaitable, Mapping
 from collections import defaultdict
 from typing import Callable, TypeVar
 from dataclasses import dataclass, field
-from io import TextIOWrapper
 from concurrent.futures import ThreadPoolExecutor
-
-import polars as pl
 
 from torminal.gtfs.gps import shape_to_path
 from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
@@ -173,9 +172,7 @@ class GTFSStaticLoader:
 
         vehicles, trips, trip_stops, routes, stops, shapes, service_calendars, feed_info = results
 
-        polygons = asyncio.create_task(
-            self.track(asyncio.to_thread(build_all_paths, shapes), "Built trip shape polygons")
-        )
+        paths = asyncio.create_task(self.track(asyncio.to_thread(build_all_paths, shapes), "Built trip shape polygons"))
 
         gtfs_static_lookup = GTFSStaticFeed(
             vehicles=vehicles,
@@ -192,7 +189,7 @@ class GTFSStaticLoader:
             self.track(asyncio.to_thread(gtfs_static_lookup.build_indices), "Built derived lookup indices")
         )
 
-        await asyncio.gather(polygons, indices)
+        await asyncio.gather(paths, indices)
 
         return gtfs_static_lookup
 
