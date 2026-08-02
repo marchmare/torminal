@@ -1,4 +1,8 @@
-# 🚋 `TORminal`
+```
+░▀█▀░█▀█░█▀▄░█▄█░▀█▀░█▀█░█▀█░█░░░
+░░█░░█░█░█▀▄░█░█░░█░░█░█░█▀█░█░░░
+░░▀░░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░▀░▀░▀░▀▀▀░
+```
 
 `TORminal` is a terminal-based dashboard for monitoring public transport using GTFS and GTFS-Realtime data.
 
@@ -7,6 +11,17 @@ The goal is to have a convenient way of looking up frequently used connections w
 `TORminal` runs in your terminal, is lightweight and distraction-free and features a TUI.
 
 For now it only supports Poznań based public transport lines. 🐐
+
+<table>
+  <tr>
+    <td><a href="screenshots/dashboard.png"><img src="screenshots/dashboard.png" width="400"></a></td>
+    <td><a href="screenshots/add_stop.png"><img src="screenshots/add_stop.png" width="400"></a></td>
+  </tr>
+  <tr>
+    <td><a href="screenshots/remove_stops.png"><img src="screenshots/remove_stops.png" width="400"></a></td>
+    <td><a href="screenshots/about.png"><img src="screenshots/about.png" width="400"></a></td>
+  </tr>
+</table>
 
 ## Installation
 

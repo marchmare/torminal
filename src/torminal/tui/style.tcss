@@ -1,4 +1,4 @@
-LoadingScreen, QueryInput, QueryRemove {
+LoadingScreen, QueryInput, QueryRemove, About {
     align: center middle;
     background: $background 60%;
     height: 100%;
@@ -83,6 +83,41 @@ QueryRemove {
         height: 15;
         width: 100%;   
     }
+}
+
+About {
+    width: 100%;
+    .box { 
+        width: 50%;
+        height: 80%;
+        padding: 1 0;
+        layout: vertical;
+    }
+    .logo {
+        height: auto;
+    }
+    & .button_container {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+    & Button{
+        width: 50%;
+        height: auto;
+    }
+
+    & Label.version {
+        height: auto;
+        color: $text 50%;
+        text-style: italic;
+    }
+    & Markdown {
+        height: 1fr;
+        width: 100%;
+        overflow-y: auto;
+        padding: 0 0 0 1;
+    }
+
 }
 
 

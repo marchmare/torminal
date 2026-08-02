@@ -1,5 +1,5 @@
 from textual.app import ComposeResult
-from textual.widgets import Label, ProgressBar, Button, Input, DataTable
+from textual.widgets import Label, ProgressBar, Button, Input, DataTable, Markdown
 from textual.screen import ModalScreen
 from textual.containers import Container, Vertical, Horizontal
 from textual import work
@@ -13,6 +13,7 @@ from torminal.tui.widgets.spinner import Spinner
 from torminal.gtfs.data import Route, Stop
 from torminal.query import Monitor, QueryKey
 from asyncio import sleep
+from importlib import metadata
 
 LOGO = """░▀█▀░█▀█░█▀▄░█▄█░▀█▀░█▀█░█▀█░█░░░
 ░░█░░█░█░█▀▄░█░█░░█░░█░█░█▀█░█░░░
@@ -226,3 +227,94 @@ class QueryRemove(ModalScreen):
     @property
     def button_cancel(self) -> Button:
         return self.query_one("#cancel", Button)
+
+
+def get_markup_stops(stops: list[Stop]) -> list[str]:
+    """Helper function, prepare formatted list of route strings to use for autocompletion."""
+    return [f"[bold $text on $accent 50%]({stop.code:>7})[/] {stop.name}" for stop in stops]
+
+
+def get_markup_routes(routes: list[Route]) -> list[str]:
+    """Helper function, prepare formatted list of route strings to use for autocompletion."""
+    return [f"[bold $text on $accent 50%]({route.id:>3})[/] {route.long_name.split('|')[0]}" for route in routes]
+
+
+class About(ModalScreen):
+    BINDINGS = [
+        ("escape", "back", "Back"),
+        ("enter", "back", "Back"),
+    ]
+    AUTO_FOCUS = ""
+
+    ABOUT = """\
+Public transport departures dashboard utilizing GTFS, GTFS-Realtime data and hours eagerly spent on reverse engeneering how Poznań public transport works.
+Makes running between Rondo Kaponiera stops slightly less luck-based (unfortunately, there's no way of differentiating them still).
+
+# Bollards
+
+Each bollard added to the dashboard represents a single stop.
+A stop can have multiple routes attached to it, so you can keep an eye on several routes of your choice at once.
+
+# Stops
+
+* **__(STOPCODE01)__ Stop name** - stop found in the GTFS feed
+* **__(STOPCODE02)__ Unavailable** - stop not found in the GTFS feed (wrong code or stop temporarily unavailabl due to maintenance)
+
+# Routes
+
+* **13** - route arriving at the parent stop
+* `16` - route not arriving at the parent stop (transit system maintenance or wrong route ID)
+
+# Bollard columns
+
+* **Route** - route ID of incoming vehicle
+* **Time** - scheduled time of arrival (from the static dataset)
+* **ETA** - estimated time of arrival, calculated with RT delays
+* **Status** - status of the vehicle
+* **Destination** - vehicle headsign
+
+# Vehicle statuses
+
+* ((o)) - RT data available, vehicle on time
+* _____ (no status) - no RT data available
+* +2 min - vehicle delayed by 2 minutes
+* -2 min - vehicle 2 minuter early
+* _STDBY_ - vehicle waiting at terminus
+* **DETOUR** - vehicle position outside the expected path
+* **STUCK** - vehicle hasn't moved for a prolonged time
+"""
+
+    def compose(self) -> ComposeResult:
+        with Vertical(classes="box"):
+            yield Label(LOGO)
+            yield Label(f"ver. {metadata.version('torminal')}", classes="version")
+            yield Markdown(self.ABOUT)
+            with Container(classes="button_container"):
+                yield Button("Back", flat=True, id="back")
+
+    def on_mount(self) -> None:
+        self.modal.border_title = " About "
+        self.modal.border_subtitle = " 🐐 "
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.dismiss()
+
+    def action_back(self) -> None:
+        self.dismiss()
+
+    @property
+    def modal(self) -> Vertical:
+        return self.query_one(".box", Vertical)
+
+    @property
+    def version(self) -> Label:
+        return self.query_one(".version", Label)
+
+    @property
+    def markdown(self) -> Markdown:
+        return self.query_one(Markdown)
+
+    @property
+    def button_back(self) -> Button:
+        return self.query_one("#back", Button)

@@ -11,7 +11,7 @@ from torminal.gtfs.static import GTFSStaticFeed
 from torminal.query import QueryKey, Monitor, RealtimePollResult
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
-from torminal.tui.modals import LoadingScreen, QueryInput, QueryRemove, get_markup_routes, get_markup_stops
+from torminal.tui.modals import LoadingScreen, QueryInput, QueryRemove, About, get_markup_routes, get_markup_stops
 from torminal.tui.widgets.bollard import Bollard, UnavailableStop
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
@@ -243,7 +243,7 @@ class TORminal(App):
 
     def action_about(self) -> None:
         """An action to display About TORminal."""
-        pass
+        self.push_screen(About())
 
     async def on_exit(self) -> None:
         await HTTPXCLIENT.aclose()
