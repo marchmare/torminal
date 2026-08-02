@@ -1,8 +1,8 @@
-```
-░▀█▀░█▀█░█▀▄░█▄█░▀█▀░█▀█░█▀█░█░░░
-░░█░░█░█░█▀▄░█░█░░█░░█░█░█▀█░█░░░
-░░▀░░▀▀▀░▀░▀░▀░▀░▀▀▀░▀░▀░▀░▀░▀▀▀░
-```
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="screenshots/logo_darkmode.png">
+  <source media="(prefers-color-scheme: light)" srcset="screenshots/logo_lightmode.png">
+  <img src="screenshots/logo_darkmode.png">
+</picture>
 
 `TORminal` is a terminal-based dashboard for monitoring public transport using GTFS and GTFS-Realtime data.
 
