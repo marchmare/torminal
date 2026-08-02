@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from io import TextIOWrapper
 from concurrent.futures import ThreadPoolExecutor
 
-import pandas as pd
+import polars as pl
 
 from torminal.gtfs.gps import shape_to_path
 from torminal.requests import fetch_gtfs_zip, fetch_vehicle_dictionary, open_gtfs_zip, open_vehicle_dictionary
@@ -206,7 +206,7 @@ def build_all_paths(shapes: dict[str, Shape], workers: int = 4) -> None:
     Build and assign buffered path for a Shape from its items.
     Runs in parallel workers since shapely releases the GIL.
     """
-    _workers = workers or cpu_count()
+    _workers = workers or cpu_count() or 1
     items = list(shapes.items())
 
     def work(part: list[tuple[str, Shape]]) -> None:
@@ -217,9 +217,9 @@ def build_all_paths(shapes: dict[str, Shape], workers: int = 4) -> None:
         pool.map(work, [items[i::_workers] for i in range(min(_workers, len(items)))])
 
 
-def read_gtfs_df(raw: bytes) -> pd.DataFrame:
+def read_gtfs_df(raw: bytes) -> pl.DataFrame:
     """Read a GTFS text file into a DataFrame, keeping every cell as a string."""
-    return pd.read_csv(io.BytesIO(raw), encoding="utf-8-sig", dtype=str, keep_default_na=False)
+    return pl.read_csv(raw, encoding="utf8-lossy", ignore_errors=True, infer_schema_length=0)
 
 
 def parse_txt_as_dict(model: type[M], raw: bytes) -> dict[str, M]:

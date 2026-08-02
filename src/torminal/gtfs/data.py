@@ -15,7 +15,7 @@ from datetime import datetime, date, UTC
 from shapely.geometry import LineString
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 from torminal.gtfs.time import (
     iso_to_dt,
@@ -39,8 +39,8 @@ class Model(ABC):
         ...
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> Any:
-        """Build models from a pandas DataFrame with vectorized column conversion."""
+    def from_df(cls, df: pl.DataFrame) -> Any:
+        """Build models from a polars DataFrame with vectorized column conversion."""
         raise NotImplementedError
 
 
@@ -104,7 +104,9 @@ class Vehicle:
         )
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> dict[str, Self]:
+    def from_df(cls, df: pl.DataFrame) -> dict[str, Self]:
+        vehicle_id = df["vehicle"].str.strip_chars().cast(pl.Int32).to_list()
+        vehicle_type = np.where(np.asarray(vehicle_id) <= 999, "tram", "bus")
         return {
             id: cls(
                 id=id,
@@ -130,16 +132,16 @@ class Vehicle:
                 has_driver_ticket_sales,
                 has_usb_charger,
             ) in zip(
-                df["vehicle"].tolist(),
-                np.where(df["vehicle"].astype(int).to_numpy() <= 999, "tram", "bus"),
+                df["vehicle"].to_list(),
+                vehicle_type,
                 enum_from_series(df["hf_lf_le"], FloorType),
-                flag_to_bool(df["ramp"]).tolist(),
-                flag_to_bool(df["air_conditioner"]).tolist(),
-                flag_to_bool(df["place_for_transp_bicycles"]).tolist(),
-                flag_to_bool(df["voice_announcement_sys"]).tolist(),
-                flag_to_bool(df["ticket_machine"]).tolist(),
-                flag_to_bool(df["ticket_sales_by_the_driver"]).tolist(),
-                flag_to_bool(df["usb_charger"]).tolist(),
+                flag_to_bool(df["ramp"]),
+                flag_to_bool(df["air_conditioner"]),
+                flag_to_bool(df["place_for_transp_bicycles"]),
+                flag_to_bool(df["voice_announcement_sys"]),
+                flag_to_bool(df["ticket_machine"]),
+                flag_to_bool(df["ticket_sales_by_the_driver"]),
+                flag_to_bool(df["usb_charger"]),
             )
         }
 
@@ -319,13 +321,13 @@ class ShapePoint(Model):
         )
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> list[Self]:
+    def from_df(cls, df: pl.DataFrame) -> list[Self]:
         return [
             cls(sequence=sequence, longitude=longitude, latitude=latitude)
             for sequence, longitude, latitude in zip(
-                df["shape_pt_sequence"].astype(int).tolist(),
-                df["shape_pt_lon"].astype(float).tolist(),
-                df["shape_pt_lat"].astype(float).tolist(),
+                df["shape_pt_sequence"].cast(pl.Int32).to_list(),
+                df["shape_pt_lon"].cast(pl.Float64).to_list(),
+                df["shape_pt_lat"].cast(pl.Float64).to_list(),
             )
         ]
 
@@ -361,7 +363,7 @@ class Route(Model):
         )
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> dict[str, Self]:
+    def from_df(cls, df: pl.DataFrame) -> dict[str, Self]:
         return {
             id: cls(
                 id=id,
@@ -373,13 +375,13 @@ class Route(Model):
                 color=color,
             )
             for id, agency_id, short_name, long_name, description, type, color in zip(
-                df["route_id"].tolist(),
-                df["agency_id"].tolist(),
-                df["route_short_name"].tolist(),
-                df["route_long_name"].tolist(),
-                df["route_desc"].tolist(),
+                df["route_id"].to_list(),
+                df["agency_id"].to_list(),
+                df["route_short_name"].to_list(),
+                df["route_long_name"].to_list(),
+                df["route_desc"].to_list(),
                 enum_from_series(df["route_type"], VehicleType),
-                df["route_color"].tolist(),
+                df["route_color"].to_list(),
             )
         }
 
@@ -413,22 +415,15 @@ class Stop(Model):
         )
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> dict[str, Self]:
+    def from_df(cls, df: pl.DataFrame) -> dict[str, Self]:
         return {
-            id: cls(
-                id=id,
-                code=code,
-                name=name,
-                latitude=latitude,
-                longitude=longitude,
-                zone=zone,
-            )
+            id: cls(id, code, name, latitude, longitude, zone)
             for id, code, name, latitude, longitude, zone in zip(
-                df["stop_id"].tolist(),
-                df["stop_code"].tolist(),
-                df["stop_name"].tolist(),
-                df["stop_lat"].astype(float).tolist(),
-                df["stop_lon"].astype(float).tolist(),
+                df["stop_id"].to_list(),
+                df["stop_code"].to_list(),
+                df["stop_name"].to_list(),
+                df["stop_lat"].cast(pl.Float64).to_list(),
+                df["stop_lon"].cast(pl.Float64).to_list(),
                 enum_from_series(df["zone_id"], Zone),
             )
         }
@@ -460,7 +455,7 @@ class StopTime(Model):
         )
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> list[Self]:
+    def from_df(cls, df: pl.DataFrame) -> list[Self]:
         return [
             cls(
                 sequence=sequence,
@@ -471,10 +466,10 @@ class StopTime(Model):
                 drop_off_type=drop_off_type,
             )
             for sequence, arrival_time, departure_time, stop_id, pickup_type, drop_off_type in zip(
-                df["stop_sequence"].astype(int).tolist(),
+                df["stop_sequence"].cast(pl.Int32).to_list(),
                 gtfs_times_to_dt(df["arrival_time"]),
                 gtfs_times_to_dt(df["departure_time"]),
-                df["stop_id"].tolist(),
+                df["stop_id"].to_list(),
                 enum_from_series(df["pickup_type"], DropoffPickupType),
                 enum_from_series(df["drop_off_type"], DropoffPickupType),
             )
@@ -525,17 +520,17 @@ class Trip(Model):
         )
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> dict[str, Self]:
+    def from_df(cls, df: pl.DataFrame) -> dict[str, Self]:
         return {
             trip_id: cls(
-                id=trip_id,
-                route_id=route_id,
-                shape_id=shape_id,
-                service_id=service_id,
-                headsign=headsign,
-                direction=direction,
-                is_wheelchair_accessible=is_wheelchair_accessible,
-                brigade=brigade,
+                trip_id,
+                route_id,
+                shape_id,
+                service_id,
+                headsign,
+                direction,
+                is_wheelchair_accessible,
+                brigade,
             )
             for (
                 trip_id,
@@ -547,14 +542,14 @@ class Trip(Model):
                 is_wheelchair_accessible,
                 brigade,
             ) in zip(
-                df["trip_id"].tolist(),
-                df["route_id"].tolist(),
-                df["shape_id"].tolist(),
-                df["service_id"].tolist(),
-                df["trip_headsign"].tolist(),
+                df["trip_id"].to_list(),
+                df["route_id"].to_list(),
+                df["shape_id"].to_list(),
+                df["service_id"].to_list(),
+                df["trip_headsign"].to_list(),
                 enum_from_series(df["direction_id"], Direction),
-                flag_to_bool(df["wheelchair_accessible"]).tolist(),
-                df["brigade"].astype(int).tolist(),
+                flag_to_bool(df["wheelchair_accessible"]),
+                df["brigade"].cast(pl.Int32).to_list(),
             )
         }
 
@@ -608,29 +603,18 @@ class ServiceCalendar(Model):
         )
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> dict[str, Self]:
+    def from_df(cls, df: pl.DataFrame) -> dict[str, Self]:
         return {
-            id: cls(
-                id=id,
-                monday=monday,
-                tuesday=tuesday,
-                wednesday=wednesday,
-                thursday=thursday,
-                friday=friday,
-                saturday=saturday,
-                sunday=sunday,
-                start_date=start_date,
-                end_date=end_date,
-            )
+            id: cls(id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date)
             for (id, monday, tuesday, wednesday, thursday, friday, saturday, sunday, start_date, end_date) in zip(
-                df["service_id"].tolist(),
-                flag_to_bool(df["monday"]).tolist(),
-                flag_to_bool(df["tuesday"]).tolist(),
-                flag_to_bool(df["wednesday"]).tolist(),
-                flag_to_bool(df["thursday"]).tolist(),
-                flag_to_bool(df["friday"]).tolist(),
-                flag_to_bool(df["saturday"]).tolist(),
-                flag_to_bool(df["sunday"]).tolist(),
+                df["service_id"].to_list(),
+                flag_to_bool(df["monday"]),
+                flag_to_bool(df["tuesday"]),
+                flag_to_bool(df["wednesday"]),
+                flag_to_bool(df["thursday"]),
+                flag_to_bool(df["friday"]),
+                flag_to_bool(df["saturday"]),
+                flag_to_bool(df["sunday"]),
                 gtfs_dates_to_dt(df["start_date"]),
                 gtfs_dates_to_dt(df["end_date"]),
             )
@@ -657,10 +641,11 @@ class Shape(GroupModel[ShapePoint]):
         return cls(id=row["shape_id"])
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> dict[str, Self]:
+    def from_df(cls, df: pl.DataFrame) -> dict[str, Self]:
         points = ShapePoint.from_df(df)
+        grouped = df.with_row_index("__idx").group_by("shape_id", maintain_order=True).agg(pl.col("__idx"))
         shapes: dict[str, Self] = {}
-        for shape_id, indices in df.groupby("shape_id", sort=False).indices.items():
+        for shape_id, indices in grouped.iter_rows():
             shapes[str(shape_id)] = cls(id=str(shape_id), items=[points[i] for i in indices])
         return shapes
 
@@ -685,13 +670,17 @@ class TripStops(GroupModel[StopTime]):
         return cls(id=row["trip_id"], headsign=row["stop_headsign"])
 
     @classmethod
-    def from_df(cls, df: pd.DataFrame) -> dict[str, Self]:
+    def from_df(cls, df: pl.DataFrame) -> dict[str, Self]:
         items = StopTime.from_df(df)
-        headsigns = df.groupby("trip_id", sort=False)["stop_headsign"].first().to_dict()
+        grouped = (
+            df.with_row_index("__idx")
+            .group_by("trip_id", maintain_order=True)
+            .agg(pl.col("stop_headsign").first(), pl.col("__idx"))
+        )
         trip_stops: dict[str, Self] = {}
-        for trip_id, indices in df.groupby("trip_id", sort=False).indices.items():
+        for trip_id, headsign, indices in grouped.iter_rows():
             trip_id = str(trip_id)
-            trip_stops[trip_id] = cls(id=trip_id, headsign=str(headsigns[trip_id]), items=[items[i] for i in indices])
+            trip_stops[trip_id] = cls(id=trip_id, headsign=str(headsign), items=[items[i] for i in indices])
         return trip_stops
 
 

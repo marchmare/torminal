@@ -3,8 +3,8 @@ from __future__ import annotations
 from datetime import datetime
 from enum import Enum, IntEnum
 from typing import TYPE_CHECKING, Any
-import numpy as np
-from pandas import Series
+
+import polars as pl
 
 if TYPE_CHECKING:
     from torminal.gtfs.data import ServiceCalendar
@@ -49,17 +49,21 @@ def resolve_service_calendar(dataset) -> ServiceCalendar | None:
     return None
 
 
-def enum_from_series(series: Any, enum_type: type[Enum]) -> list[Enum]:
+def enum_from_series(series: pl.Series, enum_type: type[Enum]) -> list[Enum]:
     """Map a column of unique enum string values to enum members, vectorized."""
 
-    converted = series.astype(int) if issubclass(enum_type, IntEnum) else series.astype(str)
-    mapping: dict[Any, Enum] = {value: enum_type(value) for value in np.unique(converted)}
-    return converted.map(mapping).tolist()
+    converted = (
+        series.str.strip_chars().cast(pl.Int32)
+        if issubclass(enum_type, IntEnum)
+        else series.str.strip_chars().cast(pl.String)
+    )
+    mapping: dict[Any, Enum] = {value: enum_type(value) for value in converted.unique().to_list()}
+    return [mapping[value] for value in converted.to_list()]
 
 
-def flag_to_bool(series: Any) -> Series:
+def flag_to_bool(series: pl.Series) -> list[bool]:
     """
     Convert a Series of "0"/"1" (or int) GTFS flag values into booleans.
     Maps 0 -> False, nonzero -> True.
     """
-    return series.astype(int).astype(bool)
+    return series.str.strip_chars().cast(pl.Int32).cast(pl.Boolean).to_list()

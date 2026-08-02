@@ -15,7 +15,7 @@ from datetime import datetime, date, time, timedelta, timezone
 from typing import Any
 
 import numpy as np
-import pandas as pd
+import polars as pl
 
 weekday_names = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
 fake_today = datetime(2026, 7, 17, 20, 0, 0)
@@ -53,33 +53,31 @@ def gtfs_time_to_dt(gtfs_time: str) -> datetime:
     return _time_base(now, hours) + timedelta(hours=hours, minutes=minutes, seconds=seconds)
 
 
-def gtfs_dates_to_dt(gtfs_dates: pd.Series) -> list[date]:
+def gtfs_dates_to_dt(gtfs_dates: pl.Series) -> list[date]:
     """Vectorized version of gtfs_date_to_dt for arrays of YYYYMMDD strings."""
 
-    x = gtfs_dates.astype(int)
+    x = gtfs_dates.cast(pl.Int64)
     iso = (
-        (x // 10000).astype(str)
+        (x // 10000).cast(pl.String)
         + "-"
-        + (x // 100 % 100).astype(str).str.zfill(2)
+        + (x // 100 % 100).cast(pl.String).str.zfill(2)
         + "-"
-        + (x % 100).astype(str).str.zfill(2)
+        + (x % 100).cast(pl.String).str.zfill(2)
     )
-    return pd.to_datetime(iso).dt.date.tolist()
+    return iso.str.to_date("%Y-%m-%d").to_list()
 
 
-def gtfs_times_to_dt(gtfs_times: pd.Series) -> list[datetime]:
+def gtfs_times_to_dt(gtfs_times: pl.Series) -> list[datetime]:
     """
     Vectorized version of gtfs_time_to_dt for arrays of HH:MM:SS strings.
     Handles times overflowing midnight (e.g. 25:03:00 -> tomorrow 01:03:00).
     Assumes every value is exactly 8 characters long (zero-padded hours).
     """
-    bytes_ = gtfs_times.to_numpy(dtype="S8").view(np.uint8).reshape(-1, 8)
+    hours = gtfs_times.str.slice(0, 2).cast(pl.Int64).to_numpy()
+    minutes = gtfs_times.str.slice(3, 2).cast(pl.Int64).to_numpy()
+    seconds = gtfs_times.str.slice(6, 2).cast(pl.Int64).to_numpy()
 
-    hours = (bytes_[:, 0] - 48) * 10 + (bytes_[:, 1] - 48)
-    minutes = (bytes_[:, 3] - 48) * 10 + (bytes_[:, 4] - 48)
-    seconds = (bytes_[:, 6] - 48) * 10 + (bytes_[:, 7] - 48)
-
-    day_seconds = hours.astype(np.int64) * 3600 + minutes.astype(np.int64) * 60 + seconds.astype(np.int64)
+    day_seconds = hours * 3600 + minutes * 60 + seconds
     day_seconds_int = 24 * 60 * 60
 
     now = datetime.now()
