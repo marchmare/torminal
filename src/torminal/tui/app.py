@@ -3,7 +3,7 @@
 import asyncio
 from textual import work, events
 from textual.app import App, ComposeResult
-from textual.widgets import Footer, Header
+from textual.widgets import Footer, Header, DataTable
 from textual.containers import Grid
 from httpx import ConnectTimeout, ConnectError
 from collections import defaultdict
@@ -11,7 +11,15 @@ from torminal.gtfs.static import GTFSStaticFeed
 from torminal.query import QueryKey, Monitor, RealtimePollResult
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
-from torminal.tui.modals import LoadingScreen, QueryInput, QueryRemove, About, get_markup_routes, get_markup_stops
+from torminal.tui.modals import (
+    LoadingScreen,
+    QueryInput,
+    QueryRemove,
+    About,
+    TripDetails,
+    get_markup_routes,
+    get_markup_stops,
+)
 from torminal.tui.widgets.bollard import Bollard, UnavailableStop
 from torminal.requests import HTTPXCLIENT
 from torminal.gtfs.realtime import GTFSRealTimeFeed, PEKARealTimeFeed
@@ -26,6 +34,7 @@ class TORminal(App):
     BINDINGS = [
         ("a", "add_new", "Add new query"),
         ("r", "remove_stops", "Remove stops"),
+        ("d", "trip_details", "Trip details"),
         ("o", "options", "Options"),
         ("A", "about", "About"),
         ("ctr+q", "quit", "Quit"),
@@ -244,6 +253,16 @@ class TORminal(App):
     def action_about(self) -> None:
         """An action to display About TORminal."""
         self.push_screen(About())
+
+    def action_trip_details(self) -> None:
+        """An action to display trip details for selected trip from active bollard."""
+
+        widget = self.app.focused
+        if not widget or not isinstance(widget, DataTable):
+            return
+        row_key = widget.get_row_at(widget.cursor_row)
+        print(row_key)
+        # self.push_screen(TripDetails())
 
     async def on_exit(self) -> None:
         await HTTPXCLIENT.aclose()
