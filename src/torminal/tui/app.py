@@ -8,7 +8,7 @@ from textual.containers import Grid
 from httpx import ConnectTimeout, ConnectError
 from collections import defaultdict
 from torminal.gtfs.static import GTFSStaticFeed
-from torminal.query import QueryKey, Monitor, RealtimePollResult
+from torminal.query import QueryKey, QueryMatch, Monitor
 from torminal.config import config, Config
 from torminal.gtfs.realtime import fetch_gtfs_rt_feed, fetch_peka_vm_feed
 from torminal.tui.modals import (
@@ -180,14 +180,15 @@ class TORminal(App):
         if not self._gtfs_rt_cache:
             return
 
-        results_by_stop: dict[str, list[RealtimePollResult]] = defaultdict(list)
-        for stop_code, poll_result in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
-            results_by_stop[stop_code].append(poll_result)
+        matches_by_stop: dict[str, list[QueryMatch]] = defaultdict(list)
+        for stop_code, match in self.monitor.poll_all(self._gtfs_rt_cache, self._peka_cache):
+            matches_by_stop[stop_code].append(match)
 
-        for stop_code, results in results_by_stop.items():
+        for stop_code, matches in matches_by_stop.items():
             if bollard := self._bollards.get(stop_code):
-                bollard.update_datatable(results)
-                bollard.update_message(results[0].message)
+                polls = [match.current_poll_result for match in matches if match.current_poll_result]
+                bollard.update_datatable(polls)
+                bollard.update_message(polls[0].message if polls else None)
 
     async def add_new_from_config(self) -> None:
         """Load queries from config and put them on dashboard"""

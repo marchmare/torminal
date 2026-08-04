@@ -66,17 +66,6 @@ class QueryKey:
 
 
 @dataclass
-class QueryMatch:
-    """Class representing mutable query data."""
-
-    trip: Trip  # stores Trip, Stop Times, Shape, Route, Service calendar
-    stop_time: StopTime  # stores Stop, arrival time
-    vehicle: Vehicle | None = None
-    position_history: deque = field(default_factory=lambda: deque(maxlen=5))
-    velocity_history: list[tuple[int, float]] = field(default_factory=list)
-
-
-@dataclass
 class RealtimePollResult:
     """Class representing data obtained from realtime feeds."""
 
@@ -90,6 +79,18 @@ class RealtimePollResult:
     vehicle: str | None = None
     velocity: float | None = None
     current_stop: int | None = None
+
+
+@dataclass
+class QueryMatch:
+    """Class representing mutable query data."""
+
+    trip: Trip  # stores Trip, Stop Times, Shape, Route, Service calendar
+    stop_time: StopTime  # stores Stop, arrival time
+    vehicle: Vehicle | None = None
+    position_history: deque = field(default_factory=lambda: deque(maxlen=5))
+    velocity_history: list[tuple[int, float]] = field(default_factory=list)
+    current_poll_result: RealtimePollResult | None = None
 
 
 class Monitor:
@@ -240,7 +241,7 @@ class Monitor:
         self,
         rt_feed: GTFSRealTimeFeed,
         peka_feeds: dict[str, PEKARealTimeFeed | None],
-    ) -> Generator[tuple[str, RealtimePollResult], None, None]:
+    ) -> Generator[tuple[str, QueryMatch], None, None]:
         """Poll all matched queries and yield results."""
 
         service = resolve_service_calendar(self.dataset)
@@ -262,7 +263,8 @@ class Monitor:
                     if not self.check_arrival_within_window(arrival):
                         continue  # skip stop times outside configured time window
 
-                    yield (stop_code, self.poll(match, rt_tu, rt_vp, rt_msg))
+                    self.poll(match, rt_tu, rt_vp, rt_msg)
+                    yield (stop_code, match)
 
     def poll(
         self,
@@ -315,15 +317,21 @@ class Monitor:
         query.position_history.append(history_entry)
         query.velocity_history.append(velocity_entry)
 
-        return RealtimePollResult(
-            message=message,
-            position=position,
-            planned_arrival=planned_arrival,
-            realtime_arrival=realtime_arrival,
-            current_stop=current_stop,
-            status=status,
-            velocity=velocity,
-            vehicle=query.vehicle.id if query.vehicle else None,
-            route_id=query.trip.route_id,
-            destination=query.trip.headsign,
+        query.current_poll_result = (
+            RealtimePollResult(
+                message=message,
+                position=position,
+                planned_arrival=planned_arrival,
+                realtime_arrival=realtime_arrival,
+                current_stop=current_stop,
+                status=status,
+                velocity=velocity,
+                vehicle=query.vehicle.id if query.vehicle else None,
+                route_id=query.trip.route_id,
+                destination=query.trip.headsign,
+            )
+            if status != VehicleStatus.NO_RT
+            else None
         )
+
+        return query.current_poll_result
