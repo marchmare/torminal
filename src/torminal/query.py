@@ -81,9 +81,12 @@ class RealtimePollResult:
     current_stop: int | None = None
 
 
-@dataclass
+@dataclass(eq=False)
 class QueryMatch:
     """Class representing mutable query data."""
+
+    # eq=False keeps identity-based __eq__/__hash__, so QueryMatch can be used as a
+    # memory pointer while its fields are mutated in place.
 
     trip: Trip  # stores Trip, Stop Times, Shape, Route, Service calendar
     stop_time: StopTime  # stores Stop, arrival time
@@ -313,25 +316,21 @@ class Monitor:
 
         status = self.determine_status(query, rt_trip_update, rt_vehicle_pos)
 
-        # update persisiting QueryMatch data
+        # update persisting QueryMatch data
         query.position_history.append(history_entry)
         query.velocity_history.append(velocity_entry)
 
-        query.current_poll_result = (
-            RealtimePollResult(
-                message=message,
-                position=position,
-                planned_arrival=planned_arrival,
-                realtime_arrival=realtime_arrival,
-                current_stop=current_stop,
-                status=status,
-                velocity=velocity,
-                vehicle=query.vehicle.id if query.vehicle else None,
-                route_id=query.trip.route_id,
-                destination=query.trip.headsign,
-            )
-            if status != VehicleStatus.NO_RT
-            else None
+        query.current_poll_result = RealtimePollResult(
+            message=message,
+            position=position,
+            planned_arrival=planned_arrival,
+            realtime_arrival=realtime_arrival,
+            current_stop=current_stop,
+            status=status,
+            velocity=velocity,
+            vehicle=query.vehicle.id if query.vehicle else None,
+            route_id=query.trip.route_id,
+            destination=query.trip.headsign,
         )
 
         return query.current_poll_result

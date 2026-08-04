@@ -186,9 +186,8 @@ class TORminal(App):
 
         for stop_code, matches in matches_by_stop.items():
             if bollard := self._bollards.get(stop_code):
-                polls = [match.current_poll_result for match in matches if match.current_poll_result]
-                bollard.update_datatable(polls)
-                bollard.update_message(polls[0].message if polls else None)
+                bollard.update_datatable(matches)
+                bollard.update_message(matches)
 
     async def add_new_from_config(self) -> None:
         """Load queries from config and put them on dashboard"""

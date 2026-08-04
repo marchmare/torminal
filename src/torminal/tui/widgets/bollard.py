@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Any, Generator
 
 from textual.widgets import Label, DataTable, Link
 from textual.containers import Vertical
-from torminal.query import RealtimePollResult, ArrivalTime
+from torminal.query import ArrivalTime
 from torminal.gtfs.data import Stop, Route, BollardMessage, VehicleStatus
 
 if TYPE_CHECKING:
-    from torminal.query import Monitor
+    from torminal.query import Monitor, QueryMatch
 
 from textual.content import Content
 
@@ -71,7 +71,7 @@ class Bollard(Vertical):
         route_ids = self.monitor.queries.get(self.stop.code, {})
         self.routes_label.content = self.format_routes(route_ids)
 
-    def update_datatable(self, polls: list[RealtimePollResult]) -> None:
+    def update_datatable(self, matches: list[QueryMatch]) -> None:
         """
         Update rows in datatable using Realtime poll results for the specific Stop.
         To be called as Monitor's poll callback.
@@ -86,8 +86,8 @@ class Bollard(Vertical):
         _cursor = self.table.cursor_coordinate
         self.table.clear()
 
-        rows = []
-        for poll in polls:
+        for match in matches:
+            poll = match.current_poll_result
 
             eta = (
                 poll.planned_arrival.eta
@@ -96,31 +96,32 @@ class Bollard(Vertical):
                 or is_rt_satus_unavailable(poll.status)
                 else poll.realtime_arrival.eta
             )
-            rows.append(
+            row = (
+                poll.route_id,
+                poll.planned_arrival.time.strftime("%H:%M"),
+                self.format_eta(eta),
                 (
-                    poll.route_id,
-                    poll.planned_arrival.time.strftime("%H:%M"),
-                    self.format_eta(eta),
-                    (
-                        self.format_delay(poll.realtime_arrival)
-                        if poll.realtime_arrival and is_off_schedule(poll.status)
-                        else self.format_status(poll.status)
-                    ),
-                    poll.destination,
-                )
+                    self.format_delay(poll.realtime_arrival)
+                    if poll.realtime_arrival and is_off_schedule(poll.status)
+                    else self.format_status(poll.status)
+                ),
+                poll.destination,
             )
 
-        self.table.add_rows(rows)
+            self.table.add_row(*row, key=match)
         self.table.sort("eta", key=self.sort_eta)
         self.table.cursor_coordinate = _cursor
 
-    def update_message(self, message: BollardMessage | None = None) -> None:
+    def update_message(self, matches: list[QueryMatch]) -> None:
         """
         Update text displayed in message label with link. Pass None to hide.
         To be called as Monitor's poll callback.
         """
+        poll = next((match.current_poll_result for match in matches if match.current_poll_result), None)
+        message = poll.message if poll else None  # TODO: make it possible to display multiple infos, not just one
+        self.message_label.display = message is not None
+        self.message_link.display = message is not None
 
-        self.message_label.display = self.message_link.display = message is not None
         if message:
             self.message_link.url = message.link
             self.message_label.content = message.message
