@@ -7,11 +7,10 @@ from textual.content import Content
 from textual_autocomplete import AutoComplete, DropdownItem
 
 from torminal.config import config
-from torminal.gtfs.static import GTFSStaticLoader
-from torminal.gtfs.static import ProgressEvent
+from torminal.gtfs.static import GTFSStaticLoader, ProgressEvent
 from torminal.tui.widgets.spinner import Spinner
 from torminal.gtfs.data import Route, Stop
-from torminal.query import Monitor, QueryKey
+from torminal.query import Monitor, QueryKey, QueryMatch
 from asyncio import sleep
 from importlib import metadata
 
@@ -314,6 +313,41 @@ A stop can have multiple routes attached to it, so you can keep an eye on severa
     @property
     def markdown(self) -> Markdown:
         return self.query_one(Markdown)
+
+    @property
+    def button_back(self) -> Button:
+        return self.query_one("#back", Button)
+
+
+class TripDetails(ModalScreen):
+    BINDINGS = [
+        ("escape", "back", "Back"),
+        ("enter", "back", "Back"),
+    ]
+
+    def __init__(self, match: QueryMatch) -> None:
+        super().__init__()
+        self.match = match
+
+    def compose(self) -> ComposeResult:
+        with Container(classes="box"):
+            with Container(classes="button_container"):
+                yield Button("Back", flat=True, id="back")
+
+    def on_mount(self) -> None:
+        self.modal.border_title = " Trip details "
+        self.modal.border_subtitle = " 🐐 "
+
+    def on_button_pressed(self, event: Button.Pressed) -> None:
+        if event.button.id == "back":
+            self.dismiss()
+
+    def action_back(self) -> None:
+        self.dismiss()
+
+    @property
+    def modal(self) -> Container:
+        return self.query_one(".box", Container)
 
     @property
     def button_back(self) -> Button:

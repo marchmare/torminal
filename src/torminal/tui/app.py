@@ -260,9 +260,8 @@ class TORminal(App):
         widget = self.app.focused
         if not widget or not isinstance(widget, DataTable):
             return
-        row_key = widget.get_row_at(widget.cursor_row)
-        print(row_key)
-        # self.push_screen(TripDetails())
+        match = widget.coordinate_to_cell_key(widget.cursor_coordinate).row_key.value
+        self.push_screen(TripDetails(match))
 
     async def on_exit(self) -> None:
         await HTTPXCLIENT.aclose()

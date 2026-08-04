@@ -1,4 +1,4 @@
-LoadingScreen, QueryInput, QueryRemove, About {
+LoadingScreen, QueryInput, QueryRemove, About, TripDetails {
     align: center middle;
     background: $background 60%;
     height: 100%;
@@ -83,6 +83,29 @@ QueryRemove {
         height: 15;
         width: 100%;   
     }
+}
+
+TripDetails {
+    width: 100%;
+    .box { 
+        width: 50%;
+        height: 80%;
+        padding: 1 0;
+        layout: vertical;
+    }
+    .logo {
+        height: auto;
+    }
+    & .button_container {
+        width: 100%;
+        height: auto;
+        align: center middle;
+    }
+    & Button{
+        width: 50%;
+        height: auto;
+    }
+
 }
 
 About {
